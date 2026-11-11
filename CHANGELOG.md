@@ -6,6 +6,10 @@ All notable changes to this provider are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-11
+
+First release.
+
 ### Added
 
 - Resources: `endpointcentral_custom_group`,
@@ -20,3 +24,6 @@ All notable changes to this provider are documented here. The format follows
   `endpointcentral_mdm_device`.
 - Zoho OAuth (Self Client refresh token), all Endpoint Central Cloud regions,
   `ENDPOINTCENTRAL_*` environment variables.
+
+[Unreleased]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dasslk/terraform-provider-endpointcentral/releases/tag/v0.1.0
