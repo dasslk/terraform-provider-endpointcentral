@@ -1,7 +1,8 @@
 # Builds, signs and publishes a GitHub release when a v* tag is pushed. The
 # registries pick releases up from there.
 #
-# Repository secrets:
+# Secrets of the "release" environment (Settings > Environments), which is
+# limited to v* tags:
 #   GPG_PRIVATE_KEY  ASCII-armored private signing key
 #   PASSPHRASE       its passphrase
 name: Release
@@ -16,6 +17,8 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    # The signing key lives in this environment, which only v* tags may use.
+    environment: release
     steps:
       - uses: actions/checkout@v7
         with:
