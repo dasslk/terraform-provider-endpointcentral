@@ -1,0 +1,29 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - copyloopvar
+    - durationcheck
+    - errcheck
+    - forcetypeassert
+    - govet
+    - ineffassign
+    - makezero
+    - misspell
+    - nilerr
+    - predeclared
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - usetesting
+  exclusions:
+    rules:
+      # The fake API in tests asserts shapes it builds itself.
+      - path: _test\.go
+        linters: [forcetypeassert, unparam]
+
+formatters:
+  enable:
+    - gofmt

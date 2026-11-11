@@ -1,0 +1,65 @@
+name: Test
+
+on:
+  pull_request:
+    paths-ignore: ["README.md", "DESIGN.md", "CHANGELOG.md"]
+  push:
+    branches: [main]
+    paths-ignore: ["README.md", "DESIGN.md", "CHANGELOG.md"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go mod download
+      - run: go build -v .
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - run: go generate ./...
+      - name: Fail if docs/ or examples/ are out of date
+        run: |
+          git diff --compact-summary --exit-code || \
+            (echo; echo "Run 'make docs' and commit the result."; exit 1)
+      - run: go tool tfplugindocs validate --provider-name endpointcentral
+
+  # Unit tests, and provider tests that run OpenTofu against an in-memory
+  # fake of the Endpoint Central API. No credentials or tenant needed.
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        tofu: ["1.9.*", "1.10.*", "latest"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ matrix.tofu }}
+          tofu_wrapper: false
+      - run: make test

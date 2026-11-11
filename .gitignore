@@ -1,0 +1,33 @@
+# Build output
+/terraform-provider-endpointcentral
+/dist/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# OpenTofu / Terraform working files
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+*.tfvars
+.terraformrc
+terraform.rc
+
+# Local, tenant-specific test bench (scripts, .env, state, real profiles)
+/opentofu/
+
+# ManageEngine's API spec: not ours to redistribute; see README for the link
+/oas_ec.json
+
+# Browser captures (HAR) hold session cookies
+*.har
+
+# Credentials, wherever they end up
+.env
+.env.*
+!.env.example
