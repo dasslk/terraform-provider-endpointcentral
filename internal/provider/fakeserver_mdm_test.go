@@ -62,9 +62,9 @@ func newFakeMDM(f *fakeEC) *fakeMDM {
 		groups:   map[int64]*fakeMDMGroup{},
 		files:    map[int64]string{},
 		devices: []fakeMDMDevice{
-			{ID: 200000000112017, Name: "macos-vm-02", Serial: "VMSERIAL002", Model: "VirtualMac2,1"},
-			{ID: 200000000112018, Name: "mac-studio-01", Serial: "C02XYZ123", Model: "Mac14,13"},
-			{ID: 200000000110155, Name: "macos-vm-01", Serial: "VMSERIAL001", Model: "VirtualMac2,1", Removed: true},
+			{ID: 200000000112017, Name: "mac-lab-02", Serial: "VMSERIAL002", Model: "VirtualMac2,1"},
+			{ID: 200000000112018, Name: "mac-001", Serial: "C02XYZ123", Model: "Mac14,13"},
+			{ID: 200000000110155, Name: "mac-lab-01", Serial: "VMSERIAL001", Model: "VirtualMac2,1", Removed: true},
 			{ID: 200000000112019, Name: "MacBookPro", Serial: "MBPSERIAL01", Model: "MacBookPro18,3"},
 		},
 	}

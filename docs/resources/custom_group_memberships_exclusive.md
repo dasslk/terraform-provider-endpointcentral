@@ -16,14 +16,14 @@ Destroying this resource stops managing the list but **leaves the members in the
 ## Example Usage
 
 ```terraform
-resource "endpointcentral_custom_group" "macos_canary" {
-  name = "macos-canary"
+resource "endpointcentral_custom_group" "pilot" {
+  name = "pilot-macs"
 }
 
 # The complete member list: members added in the console are removed on the
 # next apply.
-resource "endpointcentral_custom_group_memberships_exclusive" "macos_canary" {
-  group_id     = endpointcentral_custom_group.macos_canary.id
+resource "endpointcentral_custom_group_memberships_exclusive" "pilot" {
+  group_id     = endpointcentral_custom_group.pilot.id
   resource_ids = ["2001", "2002"]
 }
 ```
@@ -44,5 +44,5 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 
 ```shell
 # The custom group ID
-tofu import endpointcentral_custom_group_memberships_exclusive.macos_canary 301
+tofu import endpointcentral_custom_group_memberships_exclusive.pilot 301
 ```

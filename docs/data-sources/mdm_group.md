@@ -14,7 +14,7 @@ Looks up an existing MDM group by exact name.
 
 ```terraform
 data "endpointcentral_mdm_group" "virtual" {
-  name = "macos-mdm-virtual"
+  name = "lab-devices"
 }
 ```
 

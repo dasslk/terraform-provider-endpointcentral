@@ -25,8 +25,8 @@ Updating this resource never changes a static group's members.
 ```terraform
 # Static group. Its members are separate resources
 # (endpointcentral_custom_group_membership or ..._memberships_exclusive).
-resource "endpointcentral_custom_group" "macos_dev" {
-  name        = "macos-dev"
+resource "endpointcentral_custom_group" "engineering" {
+  name        = "engineering-macs"
   description = "Macs with the dev role"
 }
 
@@ -38,8 +38,8 @@ resource "endpointcentral_custom_group" "privileged" {
 
 # Dynamic group: membership is computed from criteria. Column IDs are tenant
 # specific; look them up with GET /api/1.4/customgroup/dynamic/criteriaPattern.
-resource "endpointcentral_custom_group" "macos_virtual" {
-  name             = "macos-virtual"
+resource "endpointcentral_custom_group" "test_lab" {
+  name             = "test-lab"
   category         = "dynamic"
   criteria_pattern = "1 AND 2"
   criteria = [

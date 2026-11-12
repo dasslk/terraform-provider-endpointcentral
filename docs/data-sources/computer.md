@@ -14,11 +14,11 @@ Looks up one managed computer, for example to get the resource ID that `endpoint
 
 ```terraform
 data "endpointcentral_computer" "by_name" {
-  name = "mac-studio-01"
+  name = "mac-001"
 }
 
 data "endpointcentral_computer" "by_fqdn" {
-  fqdn = "mac-studio-01.corp.example.com"
+  fqdn = "mac-001.corp.example.com"
 }
 ```
 

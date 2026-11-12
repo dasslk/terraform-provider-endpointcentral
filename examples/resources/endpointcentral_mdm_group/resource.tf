@@ -1,4 +1,4 @@
-resource "endpointcentral_mdm_group" "macos_dev" {
-  name        = "macos-dev"
+resource "endpointcentral_mdm_group" "engineering" {
+  name        = "engineering-macs"
   description = "Macs with the dev role"
 }
