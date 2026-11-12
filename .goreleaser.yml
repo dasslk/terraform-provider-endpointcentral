@@ -21,7 +21,18 @@ checksum:
   algorithm: sha256
 signs:
   - artifacts: checksum
-    args: ["--batch", "--local-user", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}"]
+    # The passphrase comes on stdin (loopback), not from gpg-agent: CI has no
+    # terminal to prompt on, and a wrong passphrase then fails with a clear
+    # "Bad passphrase".
+    stdin: "{{ .Env.GPG_PASSPHRASE }}"
+    args:
+      - --batch
+      - --pinentry-mode=loopback
+      - --passphrase-fd=0
+      - --local-user={{ .Env.GPG_FINGERPRINT }}
+      - --output=${signature}
+      - --detach-sign
+      - ${artifact}
 release:
   extra_files:
     - glob: terraform-registry-manifest.json
