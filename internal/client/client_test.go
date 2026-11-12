@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -236,5 +237,41 @@ func TestModifyCustomGroupMembers_concurrentAddsAreNotLost(t *testing.T) {
 	slices.Sort(got)
 	if want := []int64{1, 2, 3, 4, 5, 6, 7, 8}; !slices.Equal(got, want) {
 		t.Fatalf("members = %v, want %v (updates were lost)", got, want)
+	}
+}
+
+// A 401 that refuses the request (a scope the call does not accept, or
+// "Access denied", which is also what a deleted configuration answers) does
+// not fetch a new token: that would not help and Zoho rate-limits tokens.
+func TestDo_noNewTokenOnDenial(t *testing.T) {
+	for _, body := range []string{`{"errorMsg":"INVALID_OAUTHSCOPE"}`,
+		`{"errorCode":"1001","errorMsg":"Access denied - You are not allowed to access the requested resource."}`} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(body))
+		}))
+		tokens := &countingTokens{}
+		c := &Client{BaseURL: srv.URL, Tokens: tokens}
+		err := c.Do(context.Background(), Request{Method: http.MethodGet, Path: "/x"}, nil)
+		srv.Close()
+		var ae *APIError
+		if !errors.As(err, &ae) || ae.HTTPStatus != http.StatusUnauthorized || ae.Message == "" {
+			t.Fatalf("%s: err = %v, want a 401 APIError with its message", body, err)
+		}
+		if n := tokens.invalidated.Load(); n != 0 {
+			t.Fatalf("%s: token invalidated %d times, want 0", body, n)
+		}
+	}
+}
+
+func TestGetConfiguration_deletedIsNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"errorCode":"1001","errorMsg":"Access denied - You are not allowed to access the requested resource."}`))
+	}))
+	defer srv.Close()
+	c := &Client{BaseURL: srv.URL, Tokens: &countingTokens{}}
+	if _, err := c.GetConfiguration(context.Background(), "52501000000418097"); !IsNotFound(err) {
+		t.Fatalf("err = %v, want not found", err)
 	}
 }

@@ -93,6 +93,14 @@ func (e *APIError) Error() string {
 }
 
 // IsNotFound reports whether err represents a missing object.
+// isPermissionDenial reports a 401 that refuses the request itself rather
+// than the token: a scope the call does not accept, or Endpoint Central's
+// "Access denied" (errorCode 1001, also what a deleted configuration answers).
+func isPermissionDenial(raw []byte) bool {
+	e := parseError(http.StatusUnauthorized, raw)
+	return e.Code == "1001" || strings.Contains(e.Message, "INVALID_OAUTHSCOPE")
+}
+
 func IsNotFound(err error) bool {
 	var ae *APIError
 	if !errors.As(err, &ae) {
@@ -194,8 +202,10 @@ func (c *Client) do(ctx context.Context, r Request) ([]byte, error) {
 		_ = resp.Body.Close()
 
 		switch {
-		case resp.StatusCode == http.StatusUnauthorized && !reauthed:
+		case resp.StatusCode == http.StatusUnauthorized && !reauthed && !isPermissionDenial(raw):
 			// Token may have been revoked or expired early; fetch a fresh one once.
+			// Not for a denial (missing scope, no access to the object): a new
+			// token changes nothing there, and Zoho rate-limits new tokens.
 			c.Tokens.Invalidate()
 			reauthed = true
 			continue
@@ -248,6 +258,7 @@ type errorBody struct {
 	StatusCode FlexString `json:"statusCode"`
 	ErrorCode  FlexString `json:"errorCode"`
 	Message    string     `json:"message"`
+	ErrorMsg   string     `json:"errorMsg"`
 	// legacy 1.4 style
 	Status           string     `json:"status"`
 	ErrorCodeLegacy  FlexString `json:"error_code"`
@@ -263,6 +274,9 @@ func parseError(status int, raw []byte) *APIError {
 			e.Code = string(eb.ErrorCodeLegacy)
 		}
 		e.Message = eb.Message
+		if e.Message == "" {
+			e.Message = eb.ErrorMsg
+		}
 		if e.Message == "" {
 			e.Message = eb.ErrorDescription
 		}

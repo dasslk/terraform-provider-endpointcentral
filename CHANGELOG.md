@@ -6,6 +6,23 @@ All notable changes to this provider are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-13
+
+### Added
+
+- `endpointcentral_mac_custom_script`: a Mac custom script configuration
+  running a Script Repository script on custom groups. Endpoint Central
+  refuses API tokens on its modify call, so every change replaces the
+  configuration.
+- Data source `endpointcentral_script`: a Script Repository script by file
+  name. Scripts cannot be uploaded through the API.
+
+### Changed
+
+- The client no longer requests a new access token when a call is refused for
+  a missing scope or "Access denied"; that only used up Zoho's token rate
+  limit. Error messages from `/dcapi` calls now include their `errorMsg`.
+
 ## [0.1.1] - 2026-11-12
 
 ### Fixed
@@ -34,6 +51,7 @@ First release.
 - Zoho OAuth (Self Client refresh token), all Endpoint Central Cloud regions,
   `ENDPOINTCENTRAL_*` environment variables.
 
-[Unreleased]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dasslk/terraform-provider-endpointcentral/releases/tag/v0.1.0

@@ -31,6 +31,11 @@ type fakeEC struct {
 	apdTasks  map[int64]*fakeAPDTask
 	policies  []map[string]any
 	nextAPDID int64
+	// configurations (fakeserver_dcapi_test.go): Mac custom scripts by ID,
+	// and the Script Repository.
+	configs      map[int64]*fakeConfig
+	scripts      []map[string]any
+	nextConfigID int64
 	// apdModifies counts modifyAPDTask calls.
 	apdModifies int
 	// mdm is the MDM API on its own host (fakeserver_mdm_test.go).

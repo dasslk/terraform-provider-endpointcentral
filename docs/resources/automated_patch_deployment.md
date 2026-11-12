@@ -27,14 +27,14 @@ data "endpointcentral_custom_group" "all_macs" {
   name = "All Mac machines"
 }
 
-data "endpointcentral_custom_group" "macos_virtual" {
-  name = "macos-virtual"
+data "endpointcentral_custom_group" "test_lab" {
+  name = "test-lab"
 }
 
 # macOS updates on every physical Mac: all security updates, and
 # non-security updates from moderate up.
 resource "endpointcentral_automated_patch_deployment" "macos_os" {
-  name                 = "macos-os-auto-patch"
+  name                 = "macos-os-updates"
   platform             = "mac"
   deployment_policy_id = data.endpointcentral_patch_deployment_policy.notify.id
   os_updates = {
@@ -45,13 +45,13 @@ resource "endpointcentral_automated_patch_deployment" "macos_os" {
     workgroup_id      = "10000000000326019"
     workgroup_name    = "WORKGROUP"
     include_group_ids = [data.endpointcentral_custom_group.all_macs.id]
-    exclude_group_ids = [data.endpointcentral_custom_group.macos_virtual.id]
+    exclude_group_ids = [data.endpointcentral_custom_group.test_lab.id]
   }
 }
 
 # Third-party application updates on every Mac.
 resource "endpointcentral_automated_patch_deployment" "macos_apps" {
-  name                   = "macos-app-auto-patch"
+  name                   = "macos-app-updates"
   platform               = "mac"
   deployment_policy_id   = data.endpointcentral_patch_deployment_policy.notify.id
   third_party_severities = ["low", "moderate", "important", "critical"]
@@ -71,7 +71,7 @@ resource "endpointcentral_automated_patch_deployment" "macos_apps" {
 - `deployment_policy_id` (String) Deployment policy ID, e.g. from `endpointcentral_patch_deployment_policy`.
 - `name` (String) Task name.
 - `platform` (String) `mac`, `windows` or `linux`. Changing it creates a new task.
-- `target` (Attributes) Computers in a workgroup, narrowed to custom groups. The console stores targets this way, e.g. `WORKGROUP` → include *All Mac machines*, exclude `macos-virtual`. (see [below for nested schema](#nestedatt--target))
+- `target` (Attributes) Computers in a workgroup, narrowed to custom groups. The console stores targets this way, e.g. `WORKGROUP` → include *All Mac machines*, exclude `test-lab`. (see [below for nested schema](#nestedatt--target))
 
 ### Optional
 
@@ -91,13 +91,13 @@ resource "endpointcentral_automated_patch_deployment" "macos_apps" {
 
 Required:
 
-- `workgroup_id` (String) Workgroup ID (visible on an imported task).
+- `workgroup_id` (String) Workgroup ID (visible on an imported task or configuration).
 - `workgroup_name` (String) Workgroup name, e.g. `WORKGROUP`. The API requires the name with the ID.
 
 Optional:
 
 - `exclude_group_ids` (Set of String) Custom group IDs whose computers are left out, e.g. macOS VMs.
-- `include_group_ids` (Set of String) Custom group IDs whose computers get the updates.
+- `include_group_ids` (Set of String) Custom group IDs whose computers are targeted.
 
 
 <a id="nestedatt--os_updates"></a>
@@ -117,5 +117,5 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 ```shell
 # The task ID or the exact task name. Every rule is read back, so the plan
 # after an import shows whether the configuration matches the console.
-tofu import endpointcentral_automated_patch_deployment.macos_os macos-os-auto-patch
+tofu import endpointcentral_automated_patch_deployment.macos_os macos-os-updates
 ```
