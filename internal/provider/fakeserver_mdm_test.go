@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -242,12 +243,17 @@ func (m *fakeMDM) setPayload(modify bool) http.HandlerFunc {
 			return
 		}
 		var b struct {
-			FileID int64 `json:"custom_profile_file_id"`
+			FileID        int64 `json:"custom_profile_file_id"`
+			AllowExisting bool  `json:"allow_existing_payload"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		content, ok := m.files[b.FileID]
 		if !ok {
 			mdmError(w, http.StatusBadRequest, "COM0005", "invalid custom_profile_file_id")
+			return
+		}
+		if t := mdmSupportedPayload(content); t != "" && !b.AllowExisting {
+			mdmError(w, http.StatusBadRequest, "PAY0011", "Payloads supported by MDM cannot be added. Payloads [["+t+"]].")
 			return
 		}
 		p.Content, p.PayloadItem = content, m.id() // a new item ID on every edit
@@ -465,4 +471,24 @@ func (m *fakeMDM) groupByName(name string) *fakeMDMGroup {
 		}
 	}
 	return nil
+}
+
+// mdmSupportedPayloads are payload types the live API refuses in a custom
+// profile unless allow_existing_payload is set (seen on a tenant).
+var mdmSupportedPayloads = []string{"com.apple.MCX", "com.apple.applicationaccess", "com.apple.loginwindow",
+	"com.apple.mobiledevice.passwordpolicy", "com.apple.screensaver", "com.apple.security.firewall",
+	"com.apple.systempolicy.control", "com.apple.systempolicy.managed", "com.apple.systempreferences",
+	"com.apple.vpn.managed", "com.apple.system-extension-policy"}
+
+var payloadTypeRE = regexp.MustCompile(`<key>PayloadType</key>\s*<string>([^<]+)</string>`)
+
+// mdmSupportedPayload returns the first payload type in content that the MDM
+// has its own form for, or "".
+func mdmSupportedPayload(content string) string {
+	for _, m := range payloadTypeRE.FindAllStringSubmatch(content, -1) {
+		if slices.Contains(mdmSupportedPayloads, m[1]) {
+			return m[1]
+		}
+	}
+	return ""
 }

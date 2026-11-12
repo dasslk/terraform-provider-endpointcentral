@@ -294,3 +294,29 @@ data "endpointcentral_mdm_device" "d" {
 		}},
 	})
 }
+
+// A profile with a payload type the MDM also has a form for (here the
+// firewall) is accepted, as in the console, on create and on update.
+func TestMacCustomProfile_mdmSupportedPayload(t *testing.T) {
+	f := newFakeEC(t)
+	firewall := func(stealth string) string {
+		return `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>PayloadContent</key><array><dict>
+<key>PayloadType</key><string>com.apple.security.firewall</string>
+<key>EnableFirewall</key><true/><key>EnableStealthMode</key><` + stealth + `/>
+</dict></array><key>PayloadType</key><string>Configuration</string></dict></plist>`
+	}
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: testProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: profileConfig(f, "Firewall", firewall("true"), ""),
+				Check:  resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "version", "1"),
+			},
+			{
+				Config: profileConfig(f, "Firewall", firewall("false"), ""),
+				Check:  resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "version", "2"),
+			},
+		},
+	})
+}
