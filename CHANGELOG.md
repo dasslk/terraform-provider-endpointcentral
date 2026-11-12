@@ -6,6 +6,13 @@ All notable changes to this provider are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `endpointcentral_mac_custom_profile` accepts profiles with payload types
+  the MDM also has its own forms for (firewall, login window, screen saver,
+  restrictions, passcode, VPN, system extensions, ...), as the console does.
+  They failed with `PAY0011: Payloads supported by MDM cannot be added`.
+
 ## [0.1.0] - 2026-11-11
 
 First release.

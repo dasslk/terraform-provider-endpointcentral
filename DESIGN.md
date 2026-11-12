@@ -95,7 +95,7 @@ and an empty group:
 | --- | --- | --- |
 | Upload | `POST /emsapi/files` on the MDM host, `Module: MDM_CUSTOM_PROFILE`, multipart `file` | Answers 406 to `Accept: application/json`; the Endpoint Central host's `/emsapi/files` refuses OAuth |
 | Create | `POST /api/v1/mdm/profiles`, `platform_type: 6` | macOS is 6 (the docs list 1-4); names are unique (409) |
-| Content | `POST …/payloads/maccustomprofiles`, later `PUT …/payloaditems/{id}`, `custom_profile_file_id` | The item gets a new ID on every edit, so it is looked up each time |
+| Content | `POST …/payloads/maccustomprofiles`, later `PUT …/payloaditems/{id}`, `custom_profile_file_id` plus `allow_existing_payload: true` | The item gets a new ID on every edit, so it is looked up each time. Without `allow_existing_payload` (which the console sends) the API refuses payload types the MDM has its own forms for (firewall, login window, screen saver, restrictions, VPN, ...) with `PAY0011` |
 | Publish | `POST /api/v1/mdm/profiles/{id}/publish` | Version + 1 |
 | Push a new version | `PUT /api/v1/mdm/profiles/{id}/update_all` | Only when the profile is assigned somewhere; not yet seen on a device |
 | Rename | `PUT /api/v1/mdm/profiles/{id}` | |

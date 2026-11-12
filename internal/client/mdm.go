@@ -194,7 +194,15 @@ func (c *Client) SetMacProfileContent(ctx context.Context, id, fileID string) er
 	if perr != nil {
 		return perr
 	}
-	r := jsonBody(map[string]any{"custom_profile_file_id": fid})
+	// allow_existing_payload, as the MDM console sends it, accepts payload
+	// types the MDM also has its own forms for (firewall, login window,
+	// screen saver, restrictions, VPN, ...). Without it the API refuses such
+	// a profile with PAY0011 "Payloads supported by MDM cannot be added".
+	r := jsonBody(map[string]any{
+		"custom_profile_file_id": fid,
+		"custom_profile_type":    1,
+		"allow_existing_payload": true,
+	})
 	if len(items.PayloadItems) == 0 {
 		r.Method, r.Path = http.MethodPost, base
 	} else {
