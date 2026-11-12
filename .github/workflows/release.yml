@@ -4,7 +4,7 @@
 # Secrets of the "release" environment (Settings > Environments), which is
 # limited to v* tags:
 #   GPG_PRIVATE_KEY  ASCII-armored private signing key
-#   PASSPHRASE       its passphrase
+#   GPG_PASSPHRASE   its passphrase
 name: Release
 
 on:
@@ -31,7 +31,7 @@ jobs:
         uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.PASSPHRASE }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
@@ -39,4 +39,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
-          GPG_PASSPHRASE: ${{ secrets.PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
