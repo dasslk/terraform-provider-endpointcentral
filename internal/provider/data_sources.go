@@ -248,3 +248,81 @@ func (d *deploymentPolicyDataSource) Read(ctx context.Context, req datasource.Re
 	}
 	resp.Diagnostics.AddError("Deployment policy not found", fmt.Sprintf("no deployment policy named %q", m.Name.ValueString()))
 }
+
+// ---------------------------------------------------------------------------
+// endpointcentral_script
+
+type scriptDataSource struct{ client *client.Client }
+
+func NewScriptDataSource() datasource.DataSource { return &scriptDataSource{} }
+
+type scriptDataModel struct {
+	ID          types.String `tfsdk:"id"`
+	Name        types.String `tfsdk:"name"`
+	Platform    types.String `tfsdk:"platform"`
+	Description types.String `tfsdk:"description"`
+	ExitCodes   types.String `tfsdk:"exit_codes"`
+}
+
+func (d *scriptDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_script"
+}
+
+func (d *scriptDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		MarkdownDescription: "Looks up a script in the Script Repository by file name, for `endpointcentral_mac_custom_script`. " +
+			"Scripts cannot be uploaded through the API (the console's calls refuse OAuth tokens); add them in the console. " +
+			"A script's default arguments are not exposed: they may hold secrets.",
+		Attributes: map[string]schema.Attribute{
+			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Exact file name, e.g. `set-computer-name.sh`."},
+			"platform": schema.StringAttribute{
+				Optional: true, MarkdownDescription: "`mac` (default), `linux` or `windows`.",
+				Validators: []validator.String{stringvalidator.OneOf("mac", "linux", "windows")},
+			},
+			"id":          schema.StringAttribute{Computed: true, MarkdownDescription: "Script ID."},
+			"description": schema.StringAttribute{Computed: true},
+			"exit_codes":  schema.StringAttribute{Computed: true, MarkdownDescription: "Exit codes that count as success, as entered in the repository."},
+		},
+	}
+}
+
+func (d *scriptDataSource) Configure(_ context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	d.client = configureDataSource(req, resp)
+}
+
+func (d *scriptDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var m scriptDataModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &m)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	platform := m.Platform.ValueString()
+	if platform == "" {
+		platform = "mac"
+	}
+	all, err := d.client.ListScripts(ctx, platform)
+	if err != nil {
+		resp.Diagnostics.AddError("Error listing the Script Repository", err.Error())
+		return
+	}
+	var found []client.Script
+	for _, s := range all {
+		if s.Name == m.Name.ValueString() {
+			found = append(found, s)
+		}
+	}
+	switch len(found) {
+	case 0:
+		resp.Diagnostics.AddError("Script not found", fmt.Sprintf("no %s script named %q in the Script Repository", platform, m.Name.ValueString()))
+		return
+	case 1:
+	default:
+		resp.Diagnostics.AddError("Script name not unique", fmt.Sprintf("%d %s scripts are named %q", len(found), platform, m.Name.ValueString()))
+		return
+	}
+	m.ID = types.StringValue(found[0].ID.String())
+	m.Platform = types.StringValue(platform)
+	m.Description = types.StringValue(cleanDescription(found[0].Description))
+	m.ExitCodes = types.StringValue(found[0].ExitCodes)
+	resp.Diagnostics.Append(resp.State.Set(ctx, m)...)
+}

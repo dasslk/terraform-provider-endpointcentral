@@ -14,7 +14,7 @@ Looks up one enrolled MDM device by name or serial number, for its ID (`endpoint
 
 ```terraform
 data "endpointcentral_mdm_device" "by_name" {
-  name = "macos-vm-02"
+  name = "mac-lab-02"
 }
 
 data "endpointcentral_mdm_device" "by_serial" {

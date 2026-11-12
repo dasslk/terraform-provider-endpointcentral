@@ -1,5 +1,5 @@
-resource "endpointcentral_mdm_group" "macos_dev" {
-  name = "macos-dev"
+resource "endpointcentral_mdm_group" "engineering" {
+  name = "engineering-macs"
 }
 
 data "endpointcentral_mdm_device" "studio" {
@@ -8,6 +8,6 @@ data "endpointcentral_mdm_device" "studio" {
 
 # One device per resource; other members are left alone.
 resource "endpointcentral_mdm_group_membership" "studio" {
-  group_id  = endpointcentral_mdm_group.macos_dev.id
+  group_id  = endpointcentral_mdm_group.engineering.id
   device_id = data.endpointcentral_mdm_device.studio.id
 }

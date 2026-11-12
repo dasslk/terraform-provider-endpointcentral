@@ -16,8 +16,8 @@ The MDM API cannot rename a group, so changing `name` or `description` replaces 
 ## Example Usage
 
 ```terraform
-resource "endpointcentral_mdm_group" "macos_dev" {
-  name        = "macos-dev"
+resource "endpointcentral_mdm_group" "engineering" {
+  name        = "engineering-macs"
   description = "Macs with the dev role"
 }
 ```
@@ -44,5 +44,5 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-tofu import endpointcentral_mdm_group.macos_dev 200000000114014
+tofu import endpointcentral_mdm_group.engineering 200000000114014
 ```

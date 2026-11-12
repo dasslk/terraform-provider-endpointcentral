@@ -11,15 +11,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
-const tailscaleV1 = `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict><key>PayloadDisplayName</key><string>Tailscale</string><key>AuthKey</key><string>tskey-v1</string></dict></plist>`
+const profileV1 = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>PayloadDisplayName</key><string>Screensaver</string><key>ServerToken</key><string>secret-v1</string></dict></plist>`
 
-const tailscaleV2 = `<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0"><dict><key>PayloadDisplayName</key><string>Tailscale</string><key>AuthKey</key><string>tskey-v2</string></dict></plist>`
+const profileV2 = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>PayloadDisplayName</key><string>Screensaver</string><key>ServerToken</key><string>secret-v2</string></dict></plist>`
 
 func profileConfig(f *fakeEC, name, content, extra string) string {
 	return providerBlock(f) + fmt.Sprintf(`
-resource "endpointcentral_mac_custom_profile" "tailscale" {
+resource "endpointcentral_mac_custom_profile" "screensaver" {
   name    = %q
   content = %q
   %s
@@ -51,14 +51,14 @@ func TestMacCustomProfile(t *testing.T) {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: profileConfig(f, "Tailscale", tailscaleV1, ""),
+				Config: profileConfig(f, "Screensaver", profileV1, ""),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "content_sha256", sha256Hex(tailscaleV1)),
-					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "version", "1"),
-					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "status", "Published"),
-					checkProfile(f, "Tailscale", func(p *fakeMDMProfile) error {
+					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.screensaver", "content_sha256", sha256Hex(profileV1)),
+					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.screensaver", "version", "1"),
+					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.screensaver", "status", "Published"),
+					checkProfile(f, "Screensaver", func(p *fakeMDMProfile) error {
 						firstID = p.ID
-						if p.Platform != 6 || p.Published != tailscaleV1 || p.Version != 1 {
+						if p.Platform != 6 || p.Published != profileV1 || p.Version != 1 {
 							return fmt.Errorf("unexpected profile %+v", p)
 						}
 						return nil
@@ -68,15 +68,15 @@ func TestMacCustomProfile(t *testing.T) {
 			// A new key: published as version 2 of the same profile. It is not
 			// assigned anywhere, so nothing is pushed.
 			{
-				Config: profileConfig(f, "Tailscale", tailscaleV2, ""),
+				Config: profileConfig(f, "Screensaver", profileV2, ""),
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction("endpointcentral_mac_custom_profile.tailscale", plancheck.ResourceActionUpdate),
-					plancheck.ExpectKnownValue("endpointcentral_mac_custom_profile.tailscale", tfjsonPath("content_sha256"), knownString(sha256Hex(tailscaleV2))),
+					plancheck.ExpectResourceAction("endpointcentral_mac_custom_profile.screensaver", plancheck.ResourceActionUpdate),
+					plancheck.ExpectKnownValue("endpointcentral_mac_custom_profile.screensaver", tfjsonPath("content_sha256"), knownString(sha256Hex(profileV2))),
 				}},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "version", "2"),
-					checkProfile(f, "Tailscale", func(p *fakeMDMProfile) error {
-						if p.ID != firstID || p.Published != tailscaleV2 || f.mdm.updateAlls != 0 {
+					resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.screensaver", "version", "2"),
+					checkProfile(f, "Screensaver", func(p *fakeMDMProfile) error {
+						if p.ID != firstID || p.Published != profileV2 || f.mdm.updateAlls != 0 {
 							return fmt.Errorf("id %d (was %d), published %q, update_all %d", p.ID, firstID, p.Published, f.mdm.updateAlls)
 						}
 						return nil
@@ -85,11 +85,11 @@ func TestMacCustomProfile(t *testing.T) {
 			},
 			// Rename and describe in place: no new version.
 			{
-				Config: profileConfig(f, "Tailscale (all Macs)", tailscaleV2, `description = "VPN"`),
+				Config: profileConfig(f, "Screensaver (all Macs)", profileV2, `description = "VPN"`),
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction("endpointcentral_mac_custom_profile.tailscale", plancheck.ResourceActionUpdate),
+					plancheck.ExpectResourceAction("endpointcentral_mac_custom_profile.screensaver", plancheck.ResourceActionUpdate),
 				}},
-				Check: checkProfile(f, "Tailscale (all Macs)", func(p *fakeMDMProfile) error {
+				Check: checkProfile(f, "Screensaver (all Macs)", func(p *fakeMDMProfile) error {
 					if p.ID != firstID || p.Description != "VPN" || p.Version != 2 {
 						return fmt.Errorf("unexpected profile %+v", p)
 					}
@@ -103,15 +103,15 @@ func TestMacCustomProfile(t *testing.T) {
 					f.mdm.profiles[firstID].Name = "renamed in console"
 					f.mu.Unlock()
 				},
-				Config:             profileConfig(f, "Tailscale (all Macs)", tailscaleV2, `description = "VPN"`),
+				Config:             profileConfig(f, "Screensaver (all Macs)", profileV2, `description = "VPN"`),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
 			},
 			{
-				Config: profileConfig(f, "Tailscale (all Macs)", tailscaleV2, `description = "VPN"`),
+				Config: profileConfig(f, "Screensaver (all Macs)", profileV2, `description = "VPN"`),
 			},
 			{
-				ResourceName:            "endpointcentral_mac_custom_profile.tailscale",
+				ResourceName:            "endpointcentral_mac_custom_profile.screensaver",
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"content", "content_sha256", "file_name"},
@@ -124,7 +124,7 @@ func TestMacCustomProfile(t *testing.T) {
 // created again.
 func TestMacCustomProfile_trashedInConsole(t *testing.T) {
 	f := newFakeEC(t)
-	cfg := profileConfig(f, "Tailscale", tailscaleV1, "")
+	cfg := profileConfig(f, "Screensaver", profileV1, "")
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testProviderFactories,
 		Steps: []resource.TestStep{
@@ -140,24 +140,24 @@ func TestMacCustomProfile_trashedInConsole(t *testing.T) {
 				},
 				Config: cfg,
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction("endpointcentral_mac_custom_profile.tailscale", plancheck.ResourceActionCreate),
+					plancheck.ExpectResourceAction("endpointcentral_mac_custom_profile.screensaver", plancheck.ResourceActionCreate),
 				}},
 			},
 		},
 	})
 }
 
-// Groups, devices, membership and assignment, the way device-config would use them.
+// Groups, devices, membership and assignment, the way a fleet configuration would use them.
 func TestMDMGroupProfileAssignment(t *testing.T) {
 	f := newFakeEC(t)
 	base := func(content string) string {
-		return profileConfig(f, "Role: dev", content, "") + `
+		return profileConfig(f, "Engineering", content, "") + `
 resource "endpointcentral_mdm_group" "dev" {
-  name        = "macos-dev"
+  name        = "engineering-macs"
   description = "Macs with the dev role"
 }
 data "endpointcentral_mdm_device" "vm" {
-  name = "MACOS-VM-02"
+  name = "MAC-LAB-02"
 }
 resource "endpointcentral_mdm_group_membership" "vm" {
   group_id  = endpointcentral_mdm_group.dev.id
@@ -168,7 +168,7 @@ resource "endpointcentral_mdm_group_membership" "vm" {
 	assignment := `
 resource "endpointcentral_mdm_group_profile_assignment" "dev" {
   group_id   = endpointcentral_mdm_group.dev.id
-  profile_id = endpointcentral_mac_custom_profile.tailscale.id
+  profile_id = endpointcentral_mac_custom_profile.screensaver.id
 }`
 	resource.UnitTest(t, resource.TestCase{
 		ProtoV6ProviderFactories: testProviderFactories,
@@ -182,12 +182,12 @@ resource "endpointcentral_mdm_group_profile_assignment" "dev" {
 		},
 		Steps: []resource.TestStep{
 			{
-				Config: base(tailscaleV1) + assignment,
+				Config: base(profileV1) + assignment,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.endpointcentral_mdm_device.vm", "id", "200000000112017"),
 					resource.TestCheckResourceAttr("data.endpointcentral_mdm_device.vm", "serial_number", "VMSERIAL002"),
 					func(*terraform.State) error {
-						g, p := f.mdm.groupByName("macos-dev"), f.mdm.profileByName("Role: dev")
+						g, p := f.mdm.groupByName("engineering-macs"), f.mdm.profileByName("Engineering")
 						if g == nil || p == nil || !slices.Equal(g.Members, []int64{200000000112017}) || !slices.Equal(g.Profiles, []int64{p.ID}) {
 							return fmt.Errorf("group %+v, profile %+v", g, p)
 						}
@@ -197,7 +197,7 @@ resource "endpointcentral_mdm_group_profile_assignment" "dev" {
 			},
 			// A content change on an assigned profile is pushed to its groups.
 			{
-				Config: base(tailscaleV2) + assignment,
+				Config: base(profileV2) + assignment,
 				Check: func(*terraform.State) error {
 					if f.mdm.updateAlls != 1 {
 						return fmt.Errorf("update_all called %d times, want 1", f.mdm.updateAlls)
@@ -214,7 +214,7 @@ resource "endpointcentral_mdm_group_profile_assignment" "dev" {
 					}
 					f.mu.Unlock()
 				},
-				Config: base(tailscaleV2) + assignment,
+				Config: base(profileV2) + assignment,
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 					plancheck.ExpectResourceAction("endpointcentral_mdm_group_profile_assignment.dev", plancheck.ResourceActionCreate),
 				}},
@@ -236,9 +236,9 @@ resource "endpointcentral_mdm_group_profile_assignment" "dev" {
 			},
 			// Dropping the assignment unassigns the profile and keeps both objects.
 			{
-				Config: base(tailscaleV2),
+				Config: base(profileV2),
 				Check: func(*terraform.State) error {
-					g, p := f.mdm.groupByName("macos-dev"), f.mdm.profileByName("Role: dev")
+					g, p := f.mdm.groupByName("engineering-macs"), f.mdm.profileByName("Engineering")
 					if g == nil || p == nil || len(g.Profiles) != 0 || len(g.Members) != 1 {
 						return fmt.Errorf("group %+v, profile %+v", g, p)
 					}
@@ -254,7 +254,7 @@ func TestMDMLookups(t *testing.T) {
 	cases := map[string]struct{ cfg, err string }{
 		"removed device is ignored": {`
 data "endpointcentral_mdm_device" "d" {
-  name = "macos-vm-01"
+  name = "mac-lab-01"
 }`, `found 0`},
 		"device by serial": {`
 data "endpointcentral_mdm_device" "d" {
@@ -262,7 +262,7 @@ data "endpointcentral_mdm_device" "d" {
 }`, `found 0`},
 		"name and serial": {`
 data "endpointcentral_mdm_device" "d" {
-  name          = "mac-studio-01"
+  name          = "mac-001"
   serial_number = "C02XYZ123"
 }`, `Invalid Attribute Combination`},
 		"unknown group": {`
@@ -290,7 +290,7 @@ resource "endpointcentral_mac_custom_profile" "p" {
 data "endpointcentral_mdm_device" "d" {
   serial_number = "c02xyz123"
 }`,
-			Check: resource.TestCheckResourceAttr("data.endpointcentral_mdm_device.d", "name", "mac-studio-01"),
+			Check: resource.TestCheckResourceAttr("data.endpointcentral_mdm_device.d", "name", "mac-001"),
 		}},
 	})
 }
@@ -311,11 +311,11 @@ func TestMacCustomProfile_mdmSupportedPayload(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: profileConfig(f, "Firewall", firewall("true"), ""),
-				Check:  resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "version", "1"),
+				Check:  resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.screensaver", "version", "1"),
 			},
 			{
 				Config: profileConfig(f, "Firewall", firewall("false"), ""),
-				Check:  resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.tailscale", "version", "2"),
+				Check:  resource.TestCheckResourceAttr("endpointcentral_mac_custom_profile.screensaver", "version", "2"),
 			},
 		},
 	})

@@ -54,21 +54,40 @@ Rules that follow from this:
   task's targets are part of the task: the API reads and writes them in the
   same body as the rules, with no call for one target.
 
-## Configurations are not managed
+## Mac custom scripts
 
-Endpoint Central configurations (custom scripts, FileVault, ...) and their
-templates are left to the console. An earlier version had
-`endpointcentral_configuration` and `endpointcentral_configuration_template`;
-they were removed because:
+Endpoint Central's documented `deploy/template` call refuses custom group
+targets, and an earlier version's template-based configuration resources were
+removed for that reason. `endpointcentral_mac_custom_script` uses the calls the
+console makes instead. Tested on a live tenant (2026-11-12/13) with an empty
+target group, the resource itself included (create, no drift, replacement with
+`create_before_destroy`, destroy; two configurations may share a name):
 
-- Mac profiles, the main use, go through MDM instead (next section).
-- The API cannot create a configuration from its settings or upload a script,
-  so a configuration could only be a copy of a template built in the console.
-- Deploying a template to a custom group is refused on a live tenant (see
-  below), and targets other than groups do not suit a fleet.
+| Step | Call | OAuth |
+| --- | --- | --- |
+| List scripts | `GET /dcapi/configuration/scripts?platform=mac` | works; returns each script's default arguments in clear text |
+| Create | `POST /dcapi/configuration/mac/customScript/deploy`, `application/deployMacCustomScript.v1+json` | works; returns the `collectionId` |
+| Read | `GET /dcapi/configuration/{id}` | works; a deleted configuration answers `401` errorCode `1001` "Access denied" |
+| Modify | `POST /dcapi/configuration/{id}/deploy`, `application/deployConfig.v1+json` | **refused**: `401 INVALID_OAUTHSCOPE`, also with all Configurations scopes and an existing ID |
+| Delete | `POST /dcapi/configuration/moveToTrash`, then `DELETE /dcapi/configuration/trash/delete` | works |
+| Upload a script | `POST /emsapi/files`, then `POST /dcapi/configuration/scriptRepository/script` | **refused**: `INVALID_OAUTHSCOPE`, also with SWDeployment, Tools and Admin scopes |
 
-What remains in the console (the bootstrap Custom Script, FileVault) targets
-custom groups that this provider manages, so group membership stays in code.
+Consequences:
+
+- **Every change replaces the configuration** (all arguments force
+  replacement), so the plan says what will happen. With
+  `create_before_destroy` the new configuration exists before the old one is
+  deleted; the script runs again on every target, which for `every_startup`
+  changes nothing.
+- **Scripts are added in the console** and referenced by file name through the
+  `endpointcentral_script` data source. It does not expose default arguments.
+- **Script arguments are not secret in Endpoint Central.** The resource marks
+  them sensitive for plan output, but they sit in the state and anyone who can
+  open the configuration, or list the Script Repository through the API, sees
+  them. Prefer scripts that fetch secrets themselves.
+- The client no longer fetches a new token on a `401` that refuses the request
+  (`INVALID_OAUTHSCOPE`, `1001`): a new token changes nothing there, and Zoho
+  rate-limits new tokens.
 
 ## Mac custom profiles: the MDM API
 
@@ -110,7 +129,7 @@ Consequences:
 - **Everything about a profile changes in place**: content becomes the next
   published version of the same profile, so Macs get it replaced, not
   removed and added. Uploads expire within hours, so each change uploads again.
-- **`content` is sensitive** (enrollment keys), and `content_sha256` makes
+- **`content` is sensitive** (passwords, tokens), and `content_sha256` makes
   content changes visible in a plan. The API cannot return the content, so
   console edits to it are not detected; renames are.
 - **MDM groups are not Endpoint Central custom groups.** Profiles target MDM
@@ -187,8 +206,9 @@ applying at a time.
 
 | Wanted | Status | Why / workaround |
 | --- | --- | --- |
-| Script Repository (upload, update, delete scripts) | **not possible** | No endpoint in the cloud API. Upload scripts and build the Custom Script configuration in the console, targeting a custom group managed here. |
-| Create a Mac/Linux configuration from its settings (custom profile, custom script, FileVault, PPPC, ...) | **not in the published API** | Mac custom profiles (`.mobileconfig`, which also covers PPPC, login items and more) through the MDM API: `endpointcentral_mac_custom_profile`. Other types stay in the console. |
+| Script Repository (upload, update, delete scripts) | **console only** | No documented endpoint; the console's calls refuse OAuth tokens. Add scripts in the console and reference them with `endpointcentral_script`. |
+| Change a configuration | **console only** | The console's modify call refuses OAuth tokens, so `endpointcentral_mac_custom_script` replaces the configuration on every change. |
+| Create a Mac/Linux configuration from its settings (custom profile, custom script, FileVault, PPPC, ...) | **not in the published API** | Mac custom scripts through the console's calls: `endpointcentral_mac_custom_script`. Mac custom profiles (`.mobileconfig`, which also covers PPPC, login items and more) through the MDM API: `endpointcentral_mac_custom_profile`. Other types stay in the console. |
 | Deploy a configuration template to a custom group | **refused** | `deploy/template` rejects `custom-group` targets on a live tenant (IAM0025). |
 | MDM enrollment of iOS devices | **not possible** | No enrollment API in Endpoint Central Cloud. ManageEngine's MDM API (`mdm.manageengine.com`, `MDMOnDemand.*` scopes) belongs to MDM Plus and has no enrollment-request call either. |
 | MDM enrollment of Macs | **action only** | `POST /dcapi/som/computers/actionRequest/mdm-profile/install` pushes the MDM profile to Macs that already run the agent. It is a one-shot action with no read-back of a single computer's state and no undo, so it is not a resource yet. |
@@ -204,6 +224,7 @@ applying at a time.
 | membership | `<group_id>/<resource_id>` | Composite, like `aws_iam_role_policy_attachment`. |
 | APD task | task ID | Found after create through the task list by collection ID; renames change in place. Import takes the ID or the name. |
 | Mac custom profile, MDM group | MDM ID | Returned by the create calls. |
+| Mac custom script | collection ID | Returned by the create call; a replacement gets a new one. |
 | MDM membership, profile assignment | `<group_id>/<device_id>`, `<group_id>/<profile_id>` | Composite, like `aws_iam_role_policy_attachment`. |
 
 ## Not verified against a live tenant yet
@@ -212,3 +233,6 @@ These are covered by tests against an in-memory fake only:
 
 - `update_all` pushing a new profile version to an assigned Mac.
 - Whether `updateCg` keeps a description that is left out of the request.
+- Mac custom scripts: execution frequencies other than `once` and
+  `every_startup`; several success exit codes (sent comma-separated);
+  exclude groups; the minimum scopes.

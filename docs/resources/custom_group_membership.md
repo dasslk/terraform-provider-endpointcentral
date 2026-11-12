@@ -19,17 +19,17 @@ The API can only replace a group's whole member list, so each change reads the l
 ## Example Usage
 
 ```terraform
-resource "endpointcentral_custom_group" "macos_dev" {
-  name = "macos-dev"
+resource "endpointcentral_custom_group" "engineering" {
+  name = "engineering-macs"
 }
 
 data "endpointcentral_computer" "studio" {
-  name = "mac-studio-01"
+  name = "mac-001"
 }
 
 # One member per resource; other members of the group are left alone.
 resource "endpointcentral_custom_group_membership" "studio" {
-  group_id    = endpointcentral_custom_group.macos_dev.id
+  group_id    = endpointcentral_custom_group.engineering.id
   resource_id = data.endpointcentral_computer.studio.id
 }
 
@@ -46,7 +46,7 @@ data "endpointcentral_computer" "dev" {
 
 resource "endpointcentral_custom_group_membership" "dev" {
   for_each    = data.endpointcentral_computer.dev
-  group_id    = endpointcentral_custom_group.macos_dev.id
+  group_id    = endpointcentral_custom_group.engineering.id
   resource_id = each.value.id
 }
 ```

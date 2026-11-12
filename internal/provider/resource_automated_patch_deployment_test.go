@@ -19,14 +19,14 @@ resource "endpointcentral_custom_group" "all_macs" {
   name = "All Mac machines (test)"
 }
 resource "endpointcentral_custom_group" "virtual" {
-  name = "macos-virtual"
+  name = "test-lab"
 }
 ` + task
 }
 
 const apdOSTask = `
 resource "endpointcentral_automated_patch_deployment" "os" {
-  name                 = "macos-os-auto-patch"
+  name                 = "macos-os-updates"
   platform             = "mac"
   deployment_policy_id = data.endpointcentral_patch_deployment_policy.notify.id
   os_updates = {
@@ -69,7 +69,7 @@ func TestAutomatedPatchDeployment(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.endpointcentral_patch_deployment_policy.notify", "id", "7002"),
 					resource.TestCheckResourceAttr("endpointcentral_automated_patch_deployment.os", "status", "Active"),
-					checkAPDTask(f, "macos-os-auto-patch", func(t *fakeAPDTask) error {
+					checkAPDTask(f, "macos-os-updates", func(t *fakeAPDTask) error {
 						b := t.Body
 						got := fmt.Sprint(b["platformId"], " ", b["templateId"], " ", b["osUpdates"], " ", b["tpSeverities"])
 						want := "2 7002 [map[id:0 severities:[0 1 2 3 4]] map[id:1 severities:[2 3 4]]] []"
@@ -78,7 +78,7 @@ func TestAutomatedPatchDeployment(t *testing.T) {
 						}
 						refine := b["targetData"].(map[string]any)["allTargets"].([]any)[0].(map[string]any)["computerRefineTarget"].(map[string]any)
 						labels := fmt.Sprint(refine["includeTargets"], refine["excludeTargets"])
-						if !regexp.MustCompile(`All Mac machines \(test\).*macos-virtual`).MatchString(labels) {
+						if !regexp.MustCompile(`All Mac machines \(test\).*test-lab`).MatchString(labels) {
 							return fmt.Errorf("target labels: %s", labels)
 						}
 						return nil
@@ -92,7 +92,7 @@ func TestAutomatedPatchDeployment(t *testing.T) {
 			{
 				Config: apdConfig(f, `
 resource "endpointcentral_automated_patch_deployment" "os" {
-  name                 = "macos-os-auto-patch"
+  name                 = "macos-os-updates"
   platform             = "mac"
   deployment_policy_id = data.endpointcentral_patch_deployment_policy.notify.id
   os_updates = {
@@ -106,7 +106,7 @@ resource "endpointcentral_automated_patch_deployment" "os" {
   }
 }`),
 			},
-			{Config: cfg(""), Check: checkAPDTask(f, "macos-os-auto-patch", func(t *fakeAPDTask) error {
+			{Config: cfg(""), Check: checkAPDTask(f, "macos-os-updates", func(t *fakeAPDTask) error {
 				if fmt.Sprint(t.Body["osUpdates"]) != "[map[id:0 severities:[0 1 2 3 4]] map[id:1 severities:[2 3 4]]]" {
 					return fmt.Errorf("osUpdates = %v", t.Body["osUpdates"])
 				}
@@ -126,7 +126,7 @@ resource "endpointcentral_automated_patch_deployment" "os" {
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
 					plancheck.ExpectResourceAction("endpointcentral_automated_patch_deployment.os", plancheck.ResourceActionUpdate),
 				}},
-				Check: checkAPDTask(f, "macos-os-auto-patch", func(t *fakeAPDTask) error {
+				Check: checkAPDTask(f, "macos-os-updates", func(t *fakeAPDTask) error {
 					if t.Body["description"] != "OS updates" || fmt.Sprint(t.Body["tpSeverities"]) != "[4]" ||
 						t.Body["reportNotificationSettings"].(map[string]any)["enableNotify"] != true {
 						return fmt.Errorf("unexpected body %v", t.Body)
@@ -140,7 +140,7 @@ resource "endpointcentral_automated_patch_deployment" "os" {
 				Config: cfg(`description = "OS updates"
   third_party_severities = ["critical"]
   enabled = false`),
-				Check: checkAPDTask(f, "macos-os-auto-patch", func(t *fakeAPDTask) error {
+				Check: checkAPDTask(f, "macos-os-updates", func(t *fakeAPDTask) error {
 					if t.Status != "suspended" || f.apdModifies != 0 {
 						return fmt.Errorf("status %s, modifies %d", t.Status, f.apdModifies)
 					}
@@ -171,7 +171,7 @@ resource "endpointcentral_automated_patch_deployment" "os" {
 			{
 				ResourceName:      "endpointcentral_automated_patch_deployment.os",
 				ImportState:       true,
-				ImportStateId:     "macos-os-auto-patch",
+				ImportStateId:     "macos-os-updates",
 				ImportStateVerify: true,
 			},
 			// Deleted in the console: created again.

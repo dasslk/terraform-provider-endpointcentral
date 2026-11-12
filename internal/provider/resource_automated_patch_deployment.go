@@ -79,23 +79,9 @@ var osUpdatesAttrTypes = map[string]attr.Type{
 	"non_security": types.SetType{ElemType: types.StringType},
 }
 
-var apdTargetAttrTypes = map[string]attr.Type{
-	"workgroup_id":      types.StringType,
-	"workgroup_name":    types.StringType,
-	"include_group_ids": types.SetType{ElemType: types.StringType},
-	"exclude_group_ids": types.SetType{ElemType: types.StringType},
-}
-
 type osUpdatesModel struct {
 	Security    types.Set `tfsdk:"security"`
 	NonSecurity types.Set `tfsdk:"non_security"`
-}
-
-type apdTargetModel struct {
-	WorkgroupID   types.String `tfsdk:"workgroup_id"`
-	WorkgroupName types.String `tfsdk:"workgroup_name"`
-	Include       types.Set    `tfsdk:"include_group_ids"`
-	Exclude       types.Set    `tfsdk:"exclude_group_ids"`
 }
 
 func (r *apdResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -107,12 +93,6 @@ func (r *apdResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 		return schema.SetAttribute{
 			ElementType: types.StringType, Optional: true, MarkdownDescription: desc,
 			Validators: []validator.Set{setvalidator.ValueStringsAre(stringvalidator.OneOf(apdSeverities...))},
-		}
-	}
-	groupIDs := func(desc string) schema.SetAttribute {
-		return schema.SetAttribute{
-			ElementType: types.StringType, Optional: true, MarkdownDescription: desc,
-			Validators: []validator.Set{setvalidator.ValueStringsAre(numericIDValidator)},
 		}
 	}
 	resp.Schema = schema.Schema{
@@ -150,22 +130,8 @@ func (r *apdResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 				},
 			},
 			"third_party_severities": severities("Severities of third-party application updates to deploy (all applications). Unset: none."),
-			"target": schema.SingleNestedAttribute{
-				Required: true,
-				MarkdownDescription: "Computers in a workgroup, narrowed to custom groups. The console stores targets this way, e.g. " +
-					"`WORKGROUP` → include *All Mac machines*, exclude `macos-virtual`.",
-				Attributes: map[string]schema.Attribute{
-					"workgroup_id": schema.StringAttribute{
-						Required: true, MarkdownDescription: "Workgroup ID (visible on an imported task).",
-						Validators: []validator.String{numericIDValidator},
-					},
-					"workgroup_name": schema.StringAttribute{
-						Required: true, MarkdownDescription: "Workgroup name, e.g. `WORKGROUP`. The API requires the name with the ID.",
-					},
-					"include_group_ids": groupIDs("Custom group IDs whose computers get the updates."),
-					"exclude_group_ids": groupIDs("Custom group IDs whose computers are left out, e.g. macOS VMs."),
-				},
-			},
+			"target": groupTargetSchema("Computers in a workgroup, narrowed to custom groups. The console stores targets this way, e.g. " +
+				"`WORKGROUP` → include *All Mac machines*, exclude `test-lab`."),
 			"enabled": schema.BoolAttribute{
 				Optional: true, Computed: true, Default: booldefault.StaticBool(true),
 				MarkdownDescription: "`false` suspends the task.",
@@ -265,51 +231,12 @@ func (r *apdResource) apply(ctx context.Context, m apdModel, body map[string]any
 	body["osUpdates"] = os
 	body["tpSeverities"] = severityCodes(ctx, m.ThirdPartySeverities, &diags)
 
-	var t apdTargetModel
-	diags.Append(m.Target.As(ctx, &t, objectAsOptions)...)
-	groups, err := r.client.ListCustomGroups(ctx, true)
-	if err != nil {
-		diags.AddError("Error listing custom groups for target labels", err.Error())
+	td, d := buildGroupTarget(ctx, r.client, m.Target)
+	diags.Append(d...)
+	if diags.HasError() {
 		return diags
 	}
-	// The API requires each target's name with its ID.
-	refine := func(s types.Set) ([]any, error) {
-		var ids []string
-		diags.Append(s.ElementsAs(ctx, &ids, false)...)
-		if len(ids) == 0 {
-			return nil, nil
-		}
-		slices.Sort(ids)
-		vals := []any{}
-		for _, id := range ids {
-			i := slices.IndexFunc(groups, func(g client.CustomGroupSummary) bool { return g.GroupID.String() == id })
-			if i < 0 {
-				return nil, fmt.Errorf("custom group %s not found", id)
-			}
-			vals = append(vals, map[string]any{"idValue": id, "label": groups[i].GroupName})
-		}
-		return []any{map[string]any{"targetType": client.TargetCodeCustomGroupRefine, "selectedValues": vals}}, nil
-	}
-	refineTarget := map[string]any{}
-	for _, part := range []struct {
-		key string
-		set types.Set
-	}{{"includeTargets", t.Include}, {"excludeTargets", t.Exclude}} {
-		sel, err := refine(part.set)
-		if err != nil {
-			diags.AddAttributeError(path.Root("target"), "Invalid target", err.Error())
-			return diags
-		}
-		if sel != nil {
-			refineTarget[part.key] = sel
-		}
-	}
-	entry := map[string]any{"mainTarget": map[string]any{"targetType": client.TargetCodeWorkgroup,
-		"selectedValues": []any{map[string]any{"idValue": t.WorkgroupID.ValueString(), "label": t.WorkgroupName.ValueString()}}}}
-	if len(refineTarget) > 0 {
-		entry["computerRefineTarget"] = refineTarget
-	}
-	body["targetData"] = map[string]any{"allTargets": []any{entry}}
+	body["targetData"] = td
 	return diags
 }
 
@@ -370,47 +297,8 @@ func (r *apdResource) refresh(ctx context.Context, m *apdModel) diag.Diagnostics
 		m.ThirdPartySeverities = strSet(ctx, tp, &diags)
 	}
 
-	if td, ok := task["targetData"].(map[string]any); ok {
-		all, _ := td["allTargets"].([]any)
-		if len(all) == 1 {
-			e, _ := all[0].(map[string]any)
-			main, _ := e["mainTarget"].(map[string]any)
-			vals, _ := main["selectedValues"].([]any)
-			if fmt.Sprint(main["targetType"]) == client.TargetCodeWorkgroup && len(vals) == 1 {
-				wg, _ := vals[0].(map[string]any)
-				ids := func(key string) []string {
-					rt, _ := e["computerRefineTarget"].(map[string]any)
-					list, _ := rt[key].([]any)
-					out := []string{}
-					for _, sel := range list {
-						s, _ := sel.(map[string]any)
-						sv, _ := s["selectedValues"].([]any)
-						for _, v := range sv {
-							vm, _ := v.(map[string]any)
-							out = append(out, fmt.Sprint(vm["idValue"]))
-						}
-					}
-					return out
-				}
-				// An empty list stays unset when the configuration leaves it unset.
-				var prior apdTargetModel
-				if !m.Target.IsNull() && !m.Target.IsUnknown() {
-					diags.Append(m.Target.As(ctx, &prior, objectAsOptions)...)
-				}
-				groupSet := func(ids []string, was types.Set) types.Set {
-					if len(ids) == 0 && (was.IsNull() || m.Target.IsNull()) {
-						return types.SetNull(types.StringType)
-					}
-					return strSet(ctx, ids, &diags)
-				}
-				m.Target = types.ObjectValueMust(apdTargetAttrTypes, map[string]attr.Value{
-					"workgroup_id":      types.StringValue(fmt.Sprint(wg["idValue"])),
-					"workgroup_name":    types.StringValue(fmt.Sprint(wg["label"])),
-					"include_group_ids": groupSet(ids("includeTargets"), prior.Include),
-					"exclude_group_ids": groupSet(ids("excludeTargets"), prior.Exclude),
-				})
-			}
-		}
+	if t, ok := readGroupTarget(ctx, task["targetData"], m.Target, &diags); ok {
+		m.Target = t
 	}
 	return diags
 }

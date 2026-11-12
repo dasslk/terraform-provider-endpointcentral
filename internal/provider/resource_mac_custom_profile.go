@@ -76,8 +76,8 @@ func (r *macCustomProfileResource) Schema(_ context.Context, _ resource.SchemaRe
 			"content": schema.StringAttribute{
 				Required:  true,
 				Sensitive: true,
-				MarkdownDescription: "The `.mobileconfig` itself, e.g. `file(\"profiles/macos/role-base.mobileconfig\")` or a " +
-					"`templatefile(...)`. Sensitive, because profiles can carry secrets such as enrollment keys; it is still stored " +
+				MarkdownDescription: "The `.mobileconfig` itself, e.g. `file(\"profiles/macos/baseline.mobileconfig\")` or a " +
+					"`templatefile(...)`. Sensitive, because profiles can carry secrets such as passwords or tokens; it is still stored " +
 					"in the state, so keep the state encrypted.",
 				Validators: []validator.String{stringvalidator.LengthAtLeast(1)},
 			},

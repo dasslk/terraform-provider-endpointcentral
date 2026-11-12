@@ -23,7 +23,7 @@ terraform {
   }
 }
 
-# Credentials usually come from the environment, e.g. through 1Password:
+# Credentials usually come from the environment, e.g. from a secrets manager:
 #   ENDPOINTCENTRAL_CLIENT_ID, ENDPOINTCENTRAL_CLIENT_SECRET, ENDPOINTCENTRAL_REFRESH_TOKEN
 provider "endpointcentral" {
   region = "eu" # us, eu, in, au, cn, jp, ca, uk or sa: the ending of your console's domain

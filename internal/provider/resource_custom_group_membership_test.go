@@ -27,7 +27,7 @@ func TestCustomGroupMembership(t *testing.T) {
 	f := newFakeEC(t)
 	group := `
 resource "endpointcentral_custom_group" "dev" {
-  name        = "macos-dev"
+  name        = "engineering-macs"
   description = "Macs with the dev role"
 }
 `
@@ -53,16 +53,16 @@ resource "endpointcentral_custom_group_membership" "ws" {
 					resource.TestCheckResourceAttr("endpointcentral_custom_group_membership.dc", "id", "301/101"),
 					resource.TestCheckResourceAttr("data.endpointcentral_computer.ws", "id", "104"),
 					resource.TestCheckResourceAttr("data.endpointcentral_computer.ws", "platform", "mac"),
-					expectMembers(f, "macos-dev", 101, 104),
+					expectMembers(f, "engineering-macs", 101, 104),
 				),
 			},
 			// Non-authoritative: a member added in the console is left alone,
 			// and changing the group's description keeps every member.
 			{
-				PreConfig: func() { f.setMembers("macos-dev", 101, 104, 103) },
+				PreConfig: func() { f.setMembers("engineering-macs", 101, 104, 103) },
 				Config: providerBlock(f) + `
 resource "endpointcentral_custom_group" "dev" {
-  name        = "macos-dev"
+  name        = "engineering-macs"
   description = "Changed"
 }
 resource "endpointcentral_custom_group_membership" "dc" {
@@ -79,27 +79,27 @@ resource "endpointcentral_custom_group_membership" "ws" {
 						plancheck.ExpectResourceAction("endpointcentral_custom_group.dev", plancheck.ResourceActionUpdate),
 					},
 				},
-				Check: expectMembers(f, "macos-dev", 101, 103, 104),
+				Check: expectMembers(f, "engineering-macs", 101, 103, 104),
 			},
 			// Removing one membership removes only that member.
 			{
 				Config: providerBlock(f) + `
 resource "endpointcentral_custom_group" "dev" {
-  name        = "macos-dev"
+  name        = "engineering-macs"
   description = "Changed"
 }
 resource "endpointcentral_custom_group_membership" "dc" {
   group_id    = endpointcentral_custom_group.dev.id
   resource_id = "101"
 }`,
-				Check: expectMembers(f, "macos-dev", 101, 103),
+				Check: expectMembers(f, "engineering-macs", 101, 103),
 			},
 			// A member removed in the console is re-added.
 			{
-				PreConfig: func() { f.setMembers("macos-dev", 103) },
+				PreConfig: func() { f.setMembers("engineering-macs", 103) },
 				Config: providerBlock(f) + `
 resource "endpointcentral_custom_group" "dev" {
-  name        = "macos-dev"
+  name        = "engineering-macs"
   description = "Changed"
 }
 resource "endpointcentral_custom_group_membership" "dc" {
@@ -111,7 +111,7 @@ resource "endpointcentral_custom_group_membership" "dc" {
 						plancheck.ExpectResourceAction("endpointcentral_custom_group_membership.dc", plancheck.ResourceActionCreate),
 					},
 				},
-				Check: expectMembers(f, "macos-dev", 101, 103),
+				Check: expectMembers(f, "engineering-macs", 101, 103),
 			},
 			{
 				ResourceName:      "endpointcentral_custom_group_membership.dc",
@@ -173,7 +173,7 @@ func TestCustomGroupMembershipsExclusive(t *testing.T) {
 	cfg := func(ids string) string {
 		return providerBlock(f) + `
 resource "endpointcentral_custom_group" "canary" {
-  name = "macos-canary"
+  name = "pilot-macs"
 }
 resource "endpointcentral_custom_group_memberships_exclusive" "canary" {
   group_id     = endpointcentral_custom_group.canary.id
@@ -189,12 +189,12 @@ resource "endpointcentral_custom_group_memberships_exclusive" "canary" {
 				Config: cfg(`["101", "102"]`),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("endpointcentral_custom_group_memberships_exclusive.canary", "resource_ids.#", "2"),
-					expectMembers(f, "macos-canary", 101, 102),
+					expectMembers(f, "pilot-macs", 101, 102),
 				),
 			},
 			// Authoritative: a member added in the console shows as drift...
 			{
-				PreConfig:          func() { f.setMembers("macos-canary", 101, 102, 103) },
+				PreConfig:          func() { f.setMembers("pilot-macs", 101, 102, 103) },
 				Config:             cfg(`["101", "102"]`),
 				PlanOnly:           true,
 				ExpectNonEmptyPlan: true,
@@ -202,11 +202,11 @@ resource "endpointcentral_custom_group_memberships_exclusive" "canary" {
 			// ...and is removed by the next apply.
 			{
 				Config: cfg(`["101", "102"]`),
-				Check:  expectMembers(f, "macos-canary", 101, 102),
+				Check:  expectMembers(f, "pilot-macs", 101, 102),
 			},
 			{
 				Config: cfg(`["102", "103"]`),
-				Check:  expectMembers(f, "macos-canary", 102, 103),
+				Check:  expectMembers(f, "pilot-macs", 102, 103),
 			},
 			// A rejected ID is reported and left out of state.
 			{
@@ -215,7 +215,7 @@ resource "endpointcentral_custom_group_memberships_exclusive" "canary" {
 			},
 			{
 				Config: cfg(`[]`),
-				Check:  expectMembers(f, "macos-canary"),
+				Check:  expectMembers(f, "pilot-macs"),
 			},
 			{
 				Config: cfg(`["101"]`),

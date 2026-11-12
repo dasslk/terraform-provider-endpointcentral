@@ -282,6 +282,7 @@ func (p *endpointCentralProvider) Resources(context.Context) []func() resource.R
 		NewMDMGroupMembershipResource,
 		NewMDMGroupProfileAssignmentResource,
 		NewAutomatedPatchDeploymentResource,
+		NewMacCustomScriptResource,
 	}
 }
 
@@ -290,6 +291,7 @@ func (p *endpointCentralProvider) DataSources(context.Context) []func() datasour
 		NewCustomGroupDataSource,
 		NewComputerDataSource,
 		NewDeploymentPolicyDataSource,
+		NewScriptDataSource,
 		NewMDMGroupDataSource,
 		NewMDMDeviceDataSource,
 	}

@@ -1,24 +1,30 @@
 # A profile kept in Git.
-resource "endpointcentral_mac_custom_profile" "role_dev" {
-  name    = "Role: dev"
-  content = file("${path.module}/profiles/macos/roles/role-dev.mobileconfig")
+resource "endpointcentral_mac_custom_profile" "screensaver" {
+  name    = "Screen saver"
+  content = file("${path.module}/profiles/screensaver.mobileconfig")
 }
 
-# A generated profile: when the key rotates, the new profile is published as
+# A generated profile: when a value changes, the new profile is published as
 # the next version of the same profile and pushed to the Macs in one apply.
-resource "endpointcentral_mac_custom_profile" "tailscale_enrollment" {
-  name = "Tailscale enrollment"
-  content = templatefile("${path.module}/templates/tailscale-enrollment.mobileconfig.tftpl", {
-    auth_key = tailscale_tailnet_key.mac_enroll.key
+variable "wifi_password" {
+  type      = string
+  sensitive = true
+}
+
+resource "endpointcentral_mac_custom_profile" "wifi" {
+  name = "Office Wi-Fi"
+  content = templatefile("${path.module}/templates/wifi.mobileconfig.tftpl", {
+    ssid     = "Office"
+    password = var.wifi_password
   })
 }
 
 # Profiles reach Macs through MDM groups.
-resource "endpointcentral_mdm_group" "macos_dev" {
-  name = "macos-dev"
+resource "endpointcentral_mdm_group" "engineering" {
+  name = "engineering-macs"
 }
 
-resource "endpointcentral_mdm_group_profile_assignment" "role_dev" {
-  group_id   = endpointcentral_mdm_group.macos_dev.id
-  profile_id = endpointcentral_mac_custom_profile.role_dev.id
+resource "endpointcentral_mdm_group_profile_assignment" "screensaver" {
+  group_id   = endpointcentral_mdm_group.engineering.id
+  profile_id = endpointcentral_mac_custom_profile.screensaver.id
 }

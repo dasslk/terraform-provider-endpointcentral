@@ -19,21 +19,23 @@ family has been run against a real EU tenant. Expect breaking changes before 1.0
 | `endpointcentral_mdm_group_membership` | One device in an MDM group |
 | `endpointcentral_mdm_group_profile_assignment` | A profile assigned to an MDM group |
 | `endpointcentral_automated_patch_deployment` | An Automated Patch Deployment (APD) task |
+| `endpointcentral_mac_custom_script` | A Mac custom script configuration: a Script Repository script run on custom groups |
 
 | Data source | Description |
 |---|---|
 | `endpointcentral_custom_group` | A group by name, including built-in ones such as `All Mac machines` |
 | `endpointcentral_computer` | A computer by name, FQDN or ID (for its resource ID) |
 | `endpointcentral_patch_deployment_policy` | A patch deployment policy by name |
+| `endpointcentral_script` | A script in the Script Repository by file name |
 | `endpointcentral_mdm_group` | An MDM group by name |
 | `endpointcentral_mdm_device` | An enrolled MDM device by name or serial number |
 
 Resources model entities and their relationships separately, the way the AWS provider does
 (`aws_iam_role` + `aws_iam_role_policy_attachment`). [DESIGN.md](DESIGN.md) explains the model and lists
-what Endpoint Central's API cannot do: there is **no API for the Script Repository, for creating a
-configuration from its settings, or for iOS enrollment**, so those stay in the console. Configurations
-are not managed at all: Mac profiles go through MDM (`endpointcentral_mac_custom_profile`), and Endpoint
-Central's template deploy call refuses custom group targets.
+what Endpoint Central's API cannot do. In short: scripts cannot be **uploaded** to the Script Repository
+(add them in the console, then reference them by name), configurations cannot be **changed** through the
+API (so every change to `endpointcentral_mac_custom_script` replaces it), and there is no API for iOS
+enrollment. Mac profiles go through MDM (`endpointcentral_mac_custom_profile`).
 
 The provider is built from ManageEngine's OpenAPI 3.1 spec of the cloud API, downloadable from the
 [API index](https://www.manageengine.com/products/desktop-central/help/api/cloud/api-index.html).
@@ -64,7 +66,7 @@ holds a long-lived **refresh token** and exchanges it for one-hour access tokens
    provider does:
 
    ```
-   DesktopCentralCloud.Common.READ,DesktopCentralCloud.Common.UPDATE,DesktopCentralCloud.PatchMgmt.READ,DesktopCentralCloud.PatchMgmt.CREATE,DesktopCentralCloud.PatchMgmt.UPDATE,DesktopCentralCloud.PatchMgmt.DELETE,MDMOnDemand.MDMDeviceMgmt.READ,MDMOnDemand.MDMDeviceMgmt.CREATE,MDMOnDemand.MDMDeviceMgmt.UPDATE,MDMOnDemand.MDMDeviceMgmt.DELETE,MDMOnDemand.MDMInventory.READ
+   DesktopCentralCloud.Common.READ,DesktopCentralCloud.Common.UPDATE,DesktopCentralCloud.Configurations.READ,DesktopCentralCloud.Configurations.CREATE,DesktopCentralCloud.Configurations.UPDATE,DesktopCentralCloud.Configurations.DELETE,DesktopCentralCloud.PatchMgmt.READ,DesktopCentralCloud.PatchMgmt.CREATE,DesktopCentralCloud.PatchMgmt.UPDATE,DesktopCentralCloud.PatchMgmt.DELETE,MDMOnDemand.MDMDeviceMgmt.READ,MDMOnDemand.MDMDeviceMgmt.CREATE,MDMOnDemand.MDMDeviceMgmt.UPDATE,MDMOnDemand.MDMDeviceMgmt.DELETE,MDMOnDemand.MDMInventory.READ
    ```
 
    Custom groups alone need only `DesktopCentralCloud.Common.READ,DesktopCentralCloud.Common.UPDATE`; the
@@ -110,7 +112,7 @@ credentials are checked when the provider starts.
 
 ## Scopes per resource
 
-What each resource needs, from ManageEngine's documentation and live tests (2026-11-11). The 11 scopes in
+What each resource needs, from ManageEngine's documentation and live tests (2026-11-11). The 15 scopes in
 the list above cover everything; grant less to limit what a token can do.
 
 | Resource / data source | Scopes |
@@ -120,6 +122,7 @@ the list above cover everything; grant less to limit what a token can do.
 | `automated_patch_deployment` | `PatchMgmt.READ`, `.CREATE`, `.UPDATE`, `.DELETE`, `Common.READ` |
 | `mac_custom_profile`, `mdm_group`, `mdm_group_membership`, `mdm_group_profile_assignment`, data `mdm_group` | `MDMOnDemand.MDMDeviceMgmt.READ`, `.CREATE`, `.UPDATE`, `.DELETE` |
 | data `mdm_device` | `MDMOnDemand.MDMInventory.READ` |
+| `mac_custom_script`, data `script` | `DesktopCentralCloud.Configurations.READ`, `.CREATE`, `.UPDATE`, `.DELETE`, `Common.READ` (tested with all four; the minimum is not narrowed down yet) |
 
 ## Example
 
@@ -135,8 +138,8 @@ terraform {
 provider "endpointcentral" {}
 
 # Endpoint Central (agent) side: a group for patching.
-resource "endpointcentral_custom_group" "macos_canary" {
-  name = "macos-canary"
+resource "endpointcentral_custom_group" "pilot" {
+  name = "pilot-macs"
 }
 
 data "endpointcentral_computer" "test_mac" {
@@ -144,7 +147,7 @@ data "endpointcentral_computer" "test_mac" {
 }
 
 resource "endpointcentral_custom_group_membership" "test_mac" {
-  group_id    = endpointcentral_custom_group.macos_canary.id
+  group_id    = endpointcentral_custom_group.pilot.id
   resource_id = data.endpointcentral_computer.test_mac.id
 }
 
@@ -152,8 +155,8 @@ data "endpointcentral_patch_deployment_policy" "notify" {
   name = "Mac - Notify end users to close running applications"
 }
 
-resource "endpointcentral_automated_patch_deployment" "macos_canary" {
-  name                 = "macos-canary"
+resource "endpointcentral_automated_patch_deployment" "pilot" {
+  name                 = "pilot-macs"
   platform             = "mac"
   deployment_policy_id = data.endpointcentral_patch_deployment_policy.notify.id
   os_updates = {
@@ -163,7 +166,7 @@ resource "endpointcentral_automated_patch_deployment" "macos_canary" {
   target = {
     workgroup_id      = "123456789"
     workgroup_name    = "WORKGROUP"
-    include_group_ids = [endpointcentral_custom_group.macos_canary.id]
+    include_group_ids = [endpointcentral_custom_group.pilot.id]
   }
 }
 
@@ -173,8 +176,8 @@ resource "endpointcentral_mac_custom_profile" "screensaver" {
   content = file("${path.module}/profiles/screensaver.mobileconfig")
 }
 
-resource "endpointcentral_mdm_group" "macos_canary" {
-  name = "macos-canary"
+resource "endpointcentral_mdm_group" "pilot" {
+  name = "pilot-macs"
 }
 
 data "endpointcentral_mdm_device" "test_mac" {
@@ -182,12 +185,12 @@ data "endpointcentral_mdm_device" "test_mac" {
 }
 
 resource "endpointcentral_mdm_group_membership" "test_mac" {
-  group_id  = endpointcentral_mdm_group.macos_canary.id
+  group_id  = endpointcentral_mdm_group.pilot.id
   device_id = data.endpointcentral_mdm_device.test_mac.id
 }
 
 resource "endpointcentral_mdm_group_profile_assignment" "screensaver" {
-  group_id   = endpointcentral_mdm_group.macos_canary.id
+  group_id   = endpointcentral_mdm_group.pilot.id
   profile_id = endpointcentral_mac_custom_profile.screensaver.id
 }
 ```

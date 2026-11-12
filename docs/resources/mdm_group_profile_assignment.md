@@ -14,18 +14,18 @@ Assigns a Mac custom profile to an MDM group: the group's devices install it. De
 
 ```terraform
 data "endpointcentral_mdm_group" "virtual" {
-  name = "macos-mdm-virtual"
+  name = "lab-devices"
 }
 
-resource "endpointcentral_mac_custom_profile" "screen_lock_off" {
-  name    = "VM screen lock off"
-  content = file("${path.module}/profiles/macos/vm/screen-lock-off.mobileconfig")
+resource "endpointcentral_mac_custom_profile" "lab_screensaver" {
+  name    = "Lab screen saver"
+  content = file("${path.module}/profiles/macos/vm/lab-screensaver.mobileconfig")
 }
 
 # The group's Macs install the profile; destroying this removes it from them.
-resource "endpointcentral_mdm_group_profile_assignment" "screen_lock_off" {
+resource "endpointcentral_mdm_group_profile_assignment" "lab_screensaver" {
   group_id   = data.endpointcentral_mdm_group.virtual.id
-  profile_id = endpointcentral_mac_custom_profile.screen_lock_off.id
+  profile_id = endpointcentral_mac_custom_profile.lab_screensaver.id
 }
 ```
 
@@ -49,5 +49,5 @@ The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/c
 
 ```shell
 # <group_id>/<profile_id>
-tofu import endpointcentral_mdm_group_profile_assignment.screen_lock_off 200000000114014/200000000133026
+tofu import endpointcentral_mdm_group_profile_assignment.lab_screensaver 200000000114014/200000000133026
 ```
