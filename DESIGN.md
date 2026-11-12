@@ -59,8 +59,9 @@ Rules that follow from this:
 Endpoint Central's documented `deploy/template` call refuses custom group
 targets, and an earlier version's template-based configuration resources were
 removed for that reason. `endpointcentral_mac_custom_script` uses the calls the
-console makes instead. Tested on a live tenant (2026-11-12) with an empty
-target group:
+console makes instead. Tested on a live tenant (2026-11-12/13) with an empty
+target group, the resource itself included (create, no drift, replacement with
+`create_before_destroy`, destroy; two configurations may share a name):
 
 | Step | Call | OAuth |
 | --- | --- | --- |
@@ -234,5 +235,4 @@ These are covered by tests against an in-memory fake only:
 - Whether `updateCg` keeps a description that is left out of the request.
 - Mac custom scripts: execution frequencies other than `once` and
   `every_startup`; several success exit codes (sent comma-separated);
-  exclude groups; whether two configurations may share a name while
-  `create_before_destroy` replaces one; the minimum scopes.
+  exclude groups; the minimum scopes.
