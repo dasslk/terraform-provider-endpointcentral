@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
@@ -239,7 +240,13 @@ func (c *Client) ListAPDTasks(ctx context.Context) ([]APDTask, error) {
 			return nil, err
 		}
 		all = append(all, out.Rows...)
-		if lastPage(len(out.Rows), len(all), int(out.TotalRecords.Int64()), limit) {
+		totalRecords := out.TotalRecords.Int64()
+		if totalRecords > math.MaxInt {
+			totalRecords = math.MaxInt
+		} else if totalRecords < 0 {
+			totalRecords = 0
+		}
+		if lastPage(len(out.Rows), len(all), int(totalRecords), limit) {
 			return all, nil
 		}
 	}
