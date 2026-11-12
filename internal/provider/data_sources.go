@@ -270,8 +270,8 @@ func (d *scriptDataSource) Metadata(_ context.Context, req datasource.MetadataRe
 
 func (d *scriptDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Looks up a script in the Script Repository by file name, for `endpointcentral_mac_custom_script`. " +
-			"Scripts cannot be uploaded through the API (the console's calls refuse OAuth tokens); add them in the console. " +
+		MarkdownDescription: "Looks up a script in the Script Repository by file name, e.g. one added in the console, for " +
+			"`endpointcentral_mac_custom_script`. To manage a script itself, use the `endpointcentral_script` resource. " +
 			"A script's default arguments are not exposed: they may hold secrets.",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{Required: true, MarkdownDescription: "Exact file name, e.g. `set-computer-name.sh`."},

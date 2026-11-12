@@ -20,6 +20,7 @@ family has been run against a real EU tenant. Expect breaking changes before 1.0
 | `endpointcentral_mdm_group_profile_assignment` | A profile assigned to an MDM group |
 | `endpointcentral_automated_patch_deployment` | An Automated Patch Deployment (APD) task |
 | `endpointcentral_mac_custom_script` | A Mac custom script configuration: a Script Repository script run on custom groups |
+| `endpointcentral_script` | A script in the Script Repository |
 
 | Data source | Description |
 |---|---|
@@ -32,10 +33,9 @@ family has been run against a real EU tenant. Expect breaking changes before 1.0
 
 Resources model entities and their relationships separately, the way the AWS provider does
 (`aws_iam_role` + `aws_iam_role_policy_attachment`). [DESIGN.md](DESIGN.md) explains the model and lists
-what Endpoint Central's API cannot do. In short: scripts cannot be **uploaded** to the Script Repository
-(add them in the console, then reference them by name), configurations cannot be **changed** through the
-API (so every change to `endpointcentral_mac_custom_script` replaces it), and there is no API for iOS
-enrollment. Mac profiles go through MDM (`endpointcentral_mac_custom_profile`).
+what Endpoint Central's API cannot do, such as iOS enrollment. Mac profiles go through MDM
+(`endpointcentral_mac_custom_profile`); scripts and their configurations use the calls the console makes,
+which need the undocumented `DesktopCentralCloud.Common.CREATE` scope.
 
 The provider is built from ManageEngine's OpenAPI 3.1 spec of the cloud API, downloadable from the
 [API index](https://www.manageengine.com/products/desktop-central/help/api/cloud/api-index.html).
@@ -66,7 +66,7 @@ holds a long-lived **refresh token** and exchanges it for one-hour access tokens
    provider does:
 
    ```
-   DesktopCentralCloud.Common.READ,DesktopCentralCloud.Common.UPDATE,DesktopCentralCloud.Configurations.READ,DesktopCentralCloud.Configurations.CREATE,DesktopCentralCloud.Configurations.UPDATE,DesktopCentralCloud.Configurations.DELETE,DesktopCentralCloud.PatchMgmt.READ,DesktopCentralCloud.PatchMgmt.CREATE,DesktopCentralCloud.PatchMgmt.UPDATE,DesktopCentralCloud.PatchMgmt.DELETE,MDMOnDemand.MDMDeviceMgmt.READ,MDMOnDemand.MDMDeviceMgmt.CREATE,MDMOnDemand.MDMDeviceMgmt.UPDATE,MDMOnDemand.MDMDeviceMgmt.DELETE,MDMOnDemand.MDMInventory.READ
+   DesktopCentralCloud.Common.READ,DesktopCentralCloud.Common.CREATE,DesktopCentralCloud.Common.UPDATE,DesktopCentralCloud.Configurations.READ,DesktopCentralCloud.Configurations.CREATE,DesktopCentralCloud.Configurations.UPDATE,DesktopCentralCloud.Configurations.DELETE,DesktopCentralCloud.PatchMgmt.READ,DesktopCentralCloud.PatchMgmt.CREATE,DesktopCentralCloud.PatchMgmt.UPDATE,DesktopCentralCloud.PatchMgmt.DELETE,MDMOnDemand.MDMDeviceMgmt.READ,MDMOnDemand.MDMDeviceMgmt.CREATE,MDMOnDemand.MDMDeviceMgmt.UPDATE,MDMOnDemand.MDMDeviceMgmt.DELETE,MDMOnDemand.MDMInventory.READ
    ```
 
    Custom groups alone need only `DesktopCentralCloud.Common.READ,DesktopCentralCloud.Common.UPDATE`; the
@@ -112,7 +112,7 @@ credentials are checked when the provider starts.
 
 ## Scopes per resource
 
-What each resource needs, from ManageEngine's documentation and live tests (2026-11-11). The 15 scopes in
+What each resource needs, from ManageEngine's documentation and live tests (2026-11-11). The 16 scopes in
 the list above cover everything; grant less to limit what a token can do.
 
 | Resource / data source | Scopes |
@@ -122,7 +122,7 @@ the list above cover everything; grant less to limit what a token can do.
 | `automated_patch_deployment` | `PatchMgmt.READ`, `.CREATE`, `.UPDATE`, `.DELETE`, `Common.READ` |
 | `mac_custom_profile`, `mdm_group`, `mdm_group_membership`, `mdm_group_profile_assignment`, data `mdm_group` | `MDMOnDemand.MDMDeviceMgmt.READ`, `.CREATE`, `.UPDATE`, `.DELETE` |
 | data `mdm_device` | `MDMOnDemand.MDMInventory.READ` |
-| `mac_custom_script`, data `script` | `DesktopCentralCloud.Configurations.READ`, `.CREATE`, `.UPDATE`, `.DELETE`, `Common.READ` (tested with all four; the minimum is not narrowed down yet) |
+| `mac_custom_script`, `script`, data `script` | `DesktopCentralCloud.Configurations.READ`, `.CREATE`, `.UPDATE`, `.DELETE`, `Common.READ`, **`Common.CREATE`** (undocumented; needed to change configurations and to write the Script Repository) |
 
 ## Example
 

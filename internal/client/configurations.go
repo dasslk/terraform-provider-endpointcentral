@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 )
 
-// Configurations through the calls Endpoint Central's console makes. With an
-// OAuth token, configurations can be created, read and deleted, but not
-// modified: the console's modify call (POST /dcapi/configuration/{id}/deploy)
-// answers INVALID_OAUTHSCOPE whatever the scopes. The Script Repository can be
-// listed, not written (upload and create answer INVALID_OAUTHSCOPE too).
+// Configurations and the Script Repository, through the calls Endpoint
+// Central's console makes. Changing a configuration and every Script
+// Repository write need DesktopCentralCloud.Common.CREATE, which the published
+// spec does not mention; without it they answer INVALID_OAUTHSCOPE (creating a
+// configuration works with the Configurations scopes alone).
 
 // Script is a script in the Script Repository. Its default arguments are not
 // decoded: they may hold secrets.
@@ -104,4 +105,124 @@ func (c *Client) DeleteConfiguration(ctx context.Context, id string) error {
 		ContentType: "application/deleteConfigTrash.v1+json",
 		Accept:      "application/deletedConfigStatus.v1+json",
 	}, nil)
+}
+
+// UpdateConfiguration changes a configuration with the console's modify call.
+// The body is the create body plus collectionId and each script's detailId.
+// Without "immediate", the change reaches computers at their next refresh.
+func (c *Client) UpdateConfiguration(ctx context.Context, id string, body map[string]any) error {
+	return c.Do(ctx, Request{
+		Method:      http.MethodPost,
+		Path:        "/dcapi/configuration/" + url.PathEscape(id) + "/deploy",
+		Body:        body,
+		ContentType: "application/deployConfig.v1+json",
+		Accept:      "application/configDeployStatus.v1+json",
+	}, nil)
+}
+
+// UploadScriptFile stores a script in the temporary file store, for
+// CreateScript and UpdateScript.
+func (c *Client) UploadScriptFile(ctx context.Context, fileName string, data []byte) (string, error) {
+	return c.uploadFile(ctx, false, "Script_Repo", "application/octet-stream", fileName, data)
+}
+
+// ScriptInput is what the console sends to add or change a script.
+type ScriptInput struct {
+	Arguments   string `json:"arguments"`
+	Description string `json:"description"`
+	ExitCodes   string `json:"exitCodes"`
+	Shared      bool   `json:"shareScript"`
+	Platform    string `json:"platform"`
+	ScriptFile  struct {
+		FileID string `json:"fileID"`
+	} `json:"scriptFile"`
+}
+
+// ScriptDetails is a script as GET /dcapi/configuration/scriptRepository/{id}
+// returns it. The content is not returned.
+type ScriptDetails struct {
+	Description string `json:"description"`
+	ExitCodes   string `json:"exitCodes"`
+	Platform    string `json:"platform"`
+	Arguments   string `json:"arguments"`
+	Shared      bool   `json:"shareScript"`
+	ScriptFile  struct {
+		FileID   FlexString `json:"fileID"`
+		FileName string     `json:"fileName"`
+	} `json:"scriptFile"`
+}
+
+// CreateScript adds an uploaded script to the Script Repository and returns
+// its ID.
+func (c *Client) CreateScript(ctx context.Context, in ScriptInput) (string, error) {
+	var out struct {
+		ScriptID FlexString `json:"scriptId"`
+	}
+	err := c.Do(ctx, Request{
+		Method:      http.MethodPost,
+		Path:        "/dcapi/configuration/scriptRepository/script",
+		Body:        in,
+		ContentType: "application/scriptDetails.v1+json",
+		Accept:      "application/addScriptStatus.v1+json",
+	}, &out)
+	if err != nil {
+		return "", err
+	}
+	if out.ScriptID == "" {
+		return "", errors.New("adding the script returned no script ID")
+	}
+	return out.ScriptID.String(), nil
+}
+
+// GetScript reads a script in the Script Repository.
+func (c *Client) GetScript(ctx context.Context, id string) (*ScriptDetails, error) {
+	var out ScriptDetails
+	err := c.Do(ctx, Request{Method: http.MethodGet, Path: "/dcapi/configuration/scriptRepository/" + url.PathEscape(id), Accept: "*/*"}, &out)
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateScript changes a script; the file is uploaded again each time.
+func (c *Client) UpdateScript(ctx context.Context, id string, in ScriptInput) error {
+	return c.Do(ctx, Request{
+		Method:      http.MethodPost,
+		Path:        "/dcapi/configuration/scriptRepository/" + url.PathEscape(id),
+		Body:        in,
+		ContentType: "application/scriptDetails.v1+json",
+		Accept:      "*/*",
+	}, nil)
+}
+
+// DeleteScript removes a script from the Script Repository. Endpoint Central
+// refuses while the script is in use; the error says where.
+func (c *Client) DeleteScript(ctx context.Context, id string) error {
+	var out struct {
+		Deleted          bool `json:"scriptDeleted"`
+		InConfig         bool `json:"isUsedInConfig"`
+		InPolicy         bool `json:"isUsedInDeploymentPolicy"`
+		InDynamicGroup   bool `json:"isUsedInDynamicCustomGroup"`
+		InEndpointAction bool `json:"isUsedInEA"`
+	}
+	if err := c.Do(ctx, Request{Method: http.MethodDelete, Path: "/dcapi/configuration/scriptRepository/" + url.PathEscape(id), Accept: "*/*"}, &out); err != nil {
+		return err
+	}
+	if out.Deleted {
+		return nil
+	}
+	var uses []string
+	for _, u := range []struct {
+		used bool
+		what string
+	}{{out.InConfig, "a configuration"}, {out.InPolicy, "a deployment policy"},
+		{out.InDynamicGroup, "a dynamic custom group"}, {out.InEndpointAction, "an endpoint action"}} {
+		if u.used {
+			uses = append(uses, u.what)
+		}
+	}
+	if len(uses) == 0 {
+		return fmt.Errorf("script %s was not deleted", id)
+	}
+	return fmt.Errorf("script %s was not deleted: it is used in %s", id, strings.Join(uses, ", "))
 }

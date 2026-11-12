@@ -63,11 +63,18 @@ func jsonBody(v any) Request { return Request{Body: v, ContentType: "application
 // UploadMacProfileFile uploads a .mobileconfig and returns its file ID. Files
 // expire a few hours after the upload, so upload right before using one.
 func (c *Client) UploadMacProfileFile(ctx context.Context, fileName string, data []byte) (string, error) {
+	return c.uploadFile(ctx, true, "MDM_CUSTOM_PROFILE", "application/x-apple-aspen-config", fileName, data)
+}
+
+// uploadFile stores a file in the temporary file store of the Endpoint
+// Central host (mdm false) or the MDM host and returns its file ID. module
+// names what the file is for.
+func (c *Client) uploadFile(ctx context.Context, mdm bool, module, contentType, fileName string, data []byte) (string, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	h := textproto.MIMEHeader{}
 	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename=%q`, fileName))
-	h.Set("Content-Type", "application/x-apple-aspen-config")
+	h.Set("Content-Type", contentType)
 	part, err := mw.CreatePart(h)
 	if err != nil {
 		return "", err
@@ -85,8 +92,8 @@ func (c *Client) UploadMacProfileFile(ctx context.Context, fileName string, data
 		RawBody:     buf.Bytes(),
 		ContentType: mw.FormDataContentType(),
 		Accept:      "*/*",
-		Headers:     map[string]string{"Module": "MDM_CUSTOM_PROFILE"},
-		MDM:         true,
+		Headers:     map[string]string{"Module": module},
+		MDM:         mdm,
 	}, &raw)
 	if err != nil {
 		return "", fmt.Errorf("uploading %s: %w", fileName, err)

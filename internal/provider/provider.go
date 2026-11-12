@@ -283,6 +283,7 @@ func (p *endpointCentralProvider) Resources(context.Context) []func() resource.R
 		NewMDMGroupProfileAssignmentResource,
 		NewAutomatedPatchDeploymentResource,
 		NewMacCustomScriptResource,
+		NewScriptResource,
 	}
 }
 

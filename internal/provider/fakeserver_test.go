@@ -36,6 +36,10 @@ type fakeEC struct {
 	configs      map[int64]*fakeConfig
 	scripts      []map[string]any
 	nextConfigID int64
+	// ecFiles are uploads to the Endpoint Central host: file name NUL content.
+	ecFiles        map[string]string
+	configModifies int
+	scriptModifies int
 	// apdModifies counts modifyAPDTask calls.
 	apdModifies int
 	// mdm is the MDM API on its own host (fakeserver_mdm_test.go).
