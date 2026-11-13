@@ -4,6 +4,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -249,6 +250,11 @@ func (p *endpointCentralProvider) Configure(ctx context.Context, req provider.Co
 		}
 		if !s.skipValidation {
 			if _, err := tokens.Token(ctx); err != nil {
+				if errors.Is(err, client.ErrTokenRateLimited) {
+					resp.Diagnostics.AddError("Zoho is rate-limiting access tokens",
+						err.Error()+"\n\nEvery provider run asks Zoho for an access token; Zoho allows about ten in ten minutes.")
+					return
+				}
 				resp.Diagnostics.AddError("Invalid Endpoint Central credentials",
 					err.Error()+"\n\nRegion "+s.region.Name+" issues tokens from "+s.accountsURL+".")
 				return

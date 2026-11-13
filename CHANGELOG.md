@@ -20,6 +20,8 @@ All notable changes to this provider are documented here. The format follows
 - Both need the scope `DesktopCentralCloud.Common.CREATE`, which ManageEngine's
   documentation does not mention; without it Endpoint Central answers
   `INVALID_OAUTHSCOPE`. Add it to your Self Client's grant.
+- When Zoho rate-limits access tokens, the provider says so instead of
+  reporting invalid credentials.
 
 ## [0.2.0] - 2026-11-13
 
