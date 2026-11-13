@@ -54,38 +54,46 @@ Rules that follow from this:
   task's targets are part of the task: the API reads and writes them in the
   same body as the rules, with no call for one target.
 
-## Mac custom scripts
+## Mac custom scripts and the Script Repository
 
 Endpoint Central's documented `deploy/template` call refuses custom group
 targets, and an earlier version's template-based configuration resources were
-removed for that reason. `endpointcentral_mac_custom_script` uses the calls the
-console makes instead. Tested on a live tenant (2026-11-12/13) with an empty
-target group, the resource itself included (create, no drift, replacement with
-`create_before_destroy`, destroy; two configurations may share a name):
+removed for that reason. `endpointcentral_mac_custom_script` and
+`endpointcentral_script` use the calls the console makes instead. Tested on a
+live tenant (2026-11-12/13), the resources themselves included, against an
+empty target group:
 
-| Step | Call | OAuth |
-| --- | --- | --- |
-| List scripts | `GET /dcapi/configuration/scripts?platform=mac` | works; returns each script's default arguments in clear text |
-| Create | `POST /dcapi/configuration/mac/customScript/deploy`, `application/deployMacCustomScript.v1+json` | works; returns the `collectionId` |
-| Read | `GET /dcapi/configuration/{id}` | works; a deleted configuration answers `401` errorCode `1001` "Access denied" |
-| Modify | `POST /dcapi/configuration/{id}/deploy`, `application/deployConfig.v1+json` | **refused**: `401 INVALID_OAUTHSCOPE`, also with all Configurations scopes and an existing ID |
-| Delete | `POST /dcapi/configuration/moveToTrash`, then `DELETE /dcapi/configuration/trash/delete` | works |
-| Upload a script | `POST /emsapi/files`, then `POST /dcapi/configuration/scriptRepository/script` | **refused**: `INVALID_OAUTHSCOPE`, also with SWDeployment, Tools and Admin scopes |
+| Step | Call |
+| --- | --- |
+| List scripts | `GET /dcapi/configuration/scripts?platform=mac` (returns default arguments in clear text) |
+| Read a script | `GET /dcapi/configuration/scriptRepository/{id}` (no content) |
+| Upload a script | `POST /emsapi/files`, header `Module: Script_Repo`, returns a `fileID` that expires within hours |
+| Add a script | `POST /dcapi/configuration/scriptRepository/script`, `application/scriptDetails.v1+json` |
+| Change a script | **`POST`** `/dcapi/configuration/scriptRepository/{id}` with a new upload (`PUT` is 405) |
+| Delete a script | `DELETE /dcapi/configuration/scriptRepository/{id}`; refused while in use, the answer says where |
+| Create a configuration | `POST /dcapi/configuration/mac/customScript/deploy`, `application/deployMacCustomScript.v1+json` |
+| Read a configuration | `GET /dcapi/configuration/{id}`; a deleted one answers `401` errorCode `1001` "Access denied" |
+| Change a configuration | `POST /dcapi/configuration/{id}/deploy`, `application/deployConfig.v1+json`, with `collectionId` and the script's `detailId` |
+| Delete a configuration | `POST /dcapi/configuration/moveToTrash`, then `DELETE /dcapi/configuration/trash/delete` |
+
+**Scope.** Changing a configuration and every Script Repository write need
+`DesktopCentralCloud.Common.CREATE`, which the published spec never mentions.
+Without it they answer `401 INVALID_OAUTHSCOPE` before looking at the request,
+even with every documented Configurations, SWDeployment, Tools and Admin scope;
+creating a configuration works with the Configurations scopes alone. Found by
+granting all 84 documented scopes plus `Common.CREATE`, then only the latter.
 
 Consequences:
 
-- **Every change replaces the configuration** (all arguments force
-  replacement), so the plan says what will happen. With
-  `create_before_destroy` the new configuration exists before the old one is
-  deleted; the script runs again on every target, which for `every_startup`
-  changes nothing.
-- **Scripts are added in the console** and referenced by file name through the
-  `endpointcentral_script` data source. It does not expose default arguments.
-- **Script arguments are not secret in Endpoint Central.** The resource marks
-  them sensitive for plan output, but they sit in the state and anyone who can
-  open the configuration, or list the Script Repository through the API, sees
-  them. Prefer scripts that fetch secrets themselves.
-- The client no longer fetches a new token on a `401` that refuses the request
+- **Changes are made in place**; a configuration keeps its ID.
+- **A script's content cannot be read back**, so content edits made in the
+  console are not detected; `content_sha256` shows content changes made here.
+  Description, exit codes and default arguments are read back.
+- **Script arguments are not secret in Endpoint Central.** Both resources mark
+  them sensitive for plan output, but they sit in the state, and anyone who can
+  open the configuration or list the Script Repository sees them. Prefer
+  scripts that fetch secrets themselves.
+- The client does not fetch a new token on a `401` that refuses the request
   (`INVALID_OAUTHSCOPE`, `1001`): a new token changes nothing there, and Zoho
   rate-limits new tokens.
 
@@ -206,8 +214,7 @@ applying at a time.
 
 | Wanted | Status | Why / workaround |
 | --- | --- | --- |
-| Script Repository (upload, update, delete scripts) | **console only** | No documented endpoint; the console's calls refuse OAuth tokens. Add scripts in the console and reference them with `endpointcentral_script`. |
-| Change a configuration | **console only** | The console's modify call refuses OAuth tokens, so `endpointcentral_mac_custom_script` replaces the configuration on every change. |
+| Read a script's content | **not possible** | The Script Repository returns everything but the content; `endpointcentral_script` keeps a `content_sha256`. |
 | Create a Mac/Linux configuration from its settings (custom profile, custom script, FileVault, PPPC, ...) | **not in the published API** | Mac custom scripts through the console's calls: `endpointcentral_mac_custom_script`. Mac custom profiles (`.mobileconfig`, which also covers PPPC, login items and more) through the MDM API: `endpointcentral_mac_custom_profile`. Other types stay in the console. |
 | Deploy a configuration template to a custom group | **refused** | `deploy/template` rejects `custom-group` targets on a live tenant (IAM0025). |
 | MDM enrollment of iOS devices | **not possible** | No enrollment API in Endpoint Central Cloud. ManageEngine's MDM API (`mdm.manageengine.com`, `MDMOnDemand.*` scopes) belongs to MDM Plus and has no enrollment-request call either. |
@@ -224,7 +231,8 @@ applying at a time.
 | membership | `<group_id>/<resource_id>` | Composite, like `aws_iam_role_policy_attachment`. |
 | APD task | task ID | Found after create through the task list by collection ID; renames change in place. Import takes the ID or the name. |
 | Mac custom profile, MDM group | MDM ID | Returned by the create calls. |
-| Mac custom script | collection ID | Returned by the create call; a replacement gets a new one. |
+| Mac custom script | collection ID | Returned by the create call. |
+| Script | script ID | Returned by the add call. |
 | MDM membership, profile assignment | `<group_id>/<device_id>`, `<group_id>/<profile_id>` | Composite, like `aws_iam_role_policy_attachment`. |
 
 ## Not verified against a live tenant yet
@@ -235,4 +243,6 @@ These are covered by tests against an in-memory fake only:
 - Whether `updateCg` keeps a description that is left out of the request.
 - Mac custom scripts: execution frequencies other than `once` and
   `every_startup`; several success exit codes (sent comma-separated);
-  exclude groups; the minimum scopes.
+  exclude groups.
+- Scripts: renaming through the change call (the resource replaces the
+  script instead); `shared`; Linux and Windows scripts.

@@ -55,7 +55,7 @@ func TestRefreshTokenSource_rateLimited(t *testing.T) {
 	}))
 	defer srv.Close()
 	_, err := (&RefreshTokenSource{AccountsURL: srv.URL}).Token(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "rate-limiting") || strings.Contains(err.Error(), "check client_id") {
+	if !errors.Is(err, ErrTokenRateLimited) || strings.Contains(err.Error(), "check client_id") {
 		t.Fatalf("got %v", err)
 	}
 }

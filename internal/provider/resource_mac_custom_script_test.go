@@ -36,9 +36,6 @@ resource "endpointcentral_mac_custom_script" "computer_name" {
     include_group_ids = [endpointcentral_custom_group.macs.id]
     exclude_group_ids = [endpointcentral_custom_group.virtual.id]
   }
-  lifecycle {
-    create_before_destroy = true
-  }
 }`
 
 // onlyConfig returns the one live configuration on the fake server.
@@ -95,19 +92,22 @@ func TestMacCustomScript(t *testing.T) {
 			},
 			// Everything is read back: no drift.
 			{Config: scriptConfig(f, fmt.Sprintf(computerNameScript, "--prefix v1")), PlanOnly: true},
-			// A change replaces the configuration, the new one first.
+			// A change is made in place: same configuration, new settings.
 			{
 				Config: scriptConfig(f, fmt.Sprintf(computerNameScript, "--prefix v2")),
 				ConfigPlanChecks: resource.ConfigPlanChecks{PreApply: []plancheck.PlanCheck{
-					plancheck.ExpectResourceAction("endpointcentral_mac_custom_script.computer_name", plancheck.ResourceActionCreateBeforeDestroy),
+					plancheck.ExpectResourceAction("endpointcentral_mac_custom_script.computer_name", plancheck.ResourceActionUpdate),
 				}},
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttrWith("endpointcentral_mac_custom_script.computer_name", "id", func(v string) error {
-						if v == firstID {
-							return fmt.Errorf("configuration kept ID %s, want a new one", v)
+					resource.TestCheckResourceAttrPtr("endpointcentral_mac_custom_script.computer_name", "id", &firstID),
+					func(*terraform.State) error {
+						f.mu.Lock()
+						defer f.mu.Unlock()
+						if f.configModifies != 1 {
+							return fmt.Errorf("%d modify calls, want 1", f.configModifies)
 						}
 						return nil
-					}),
+					},
 					func(*terraform.State) error {
 						c, err := onlyConfig(f)
 						if err != nil {

@@ -3,12 +3,12 @@
 page_title: "endpointcentral_script Data Source - endpointcentral"
 subcategory: ""
 description: |-
-  Looks up a script in the Script Repository by file name, for endpointcentral_mac_custom_script. Scripts cannot be uploaded through the API (the console's calls refuse OAuth tokens); add them in the console. A script's default arguments are not exposed: they may hold secrets.
+  Looks up a script in the Script Repository by file name, e.g. one added in the console, for endpointcentral_mac_custom_script. To manage a script itself, use the endpointcentral_script resource. A script's default arguments are not exposed: they may hold secrets.
 ---
 
 # endpointcentral_script (Data Source)
 
-Looks up a script in the Script Repository by file name, for `endpointcentral_mac_custom_script`. Scripts cannot be uploaded through the API (the console's calls refuse OAuth tokens); add them in the console. A script's default arguments are not exposed: they may hold secrets.
+Looks up a script in the Script Repository by file name, e.g. one added in the console, for `endpointcentral_mac_custom_script`. To manage a script itself, use the `endpointcentral_script` resource. A script's default arguments are not exposed: they may hold secrets.
 
 ## Example Usage
 

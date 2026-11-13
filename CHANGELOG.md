@@ -6,6 +6,23 @@ All notable changes to this provider are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- `endpointcentral_script`: a script in the Script Repository, with its
+  content, description, default arguments and exit codes, changed in place.
+
+### Changed
+
+- `endpointcentral_mac_custom_script` changes configurations in place instead
+  of replacing them.
+- Both need the scope `DesktopCentralCloud.Common.CREATE`, which ManageEngine's
+  documentation does not mention; without it Endpoint Central answers
+  `INVALID_OAUTHSCOPE`. Add it to your Self Client's grant.
+- When Zoho rate-limits access tokens, the provider says so instead of
+  reporting invalid credentials.
+
 ## [0.2.0] - 2026-11-13
 
 ### Added
@@ -51,7 +68,8 @@ First release.
 - Zoho OAuth (Self Client refresh token), all Endpoint Central Cloud regions,
   `ENDPOINTCENTRAL_*` environment variables.
 
-[Unreleased]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/dasslk/terraform-provider-endpointcentral/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/dasslk/terraform-provider-endpointcentral/releases/tag/v0.1.0

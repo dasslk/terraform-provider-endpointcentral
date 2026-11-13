@@ -4,47 +4,43 @@ page_title: "endpointcentral_mac_custom_script Resource - endpointcentral"
 subcategory: ""
 description: |-
   A Mac custom script configuration: runs a script from the Script Repository on the computers of a workgroup, narrowed to custom groups.
-  Endpoint Central lets an API token create, read and delete configurations, but not change them (the console's modify call refuses OAuth tokens). Every change therefore replaces the configuration: a new one is created and the old one deleted, and the script runs again on every target. Use create_before_destroy so the targets are never without it.
-  Scripts cannot be uploaded through the API either: add them to the Script Repository in the console and find them with the endpointcentral_script data source.
+  Changes are made in place with the console's modify call and reach computers at their next refresh. That call needs the DesktopCentralCloud.Common.CREATE scope besides the Configurations scopes; without it, creating works but changes fail with INVALID_OAUTHSCOPE.
+  The script comes from the Script Repository: manage it with the endpointcentral_script resource, or find one added in the console with the endpointcentral_script data source.
 ---
 
 # endpointcentral_mac_custom_script (Resource)
 
 A Mac custom script configuration: runs a script from the Script Repository on the computers of a workgroup, narrowed to custom groups.
 
-Endpoint Central lets an API token create, read and delete configurations, but not change them (the console's modify call refuses OAuth tokens). **Every change therefore replaces the configuration**: a new one is created and the old one deleted, and the script runs again on every target. Use `create_before_destroy` so the targets are never without it.
+Changes are made in place with the console's modify call and reach computers at their next refresh. That call needs the `DesktopCentralCloud.Common.CREATE` scope besides the Configurations scopes; without it, creating works but changes fail with `INVALID_OAUTHSCOPE`.
 
-Scripts cannot be uploaded through the API either: add them to the Script Repository in the console and find them with the `endpointcentral_script` data source.
+The script comes from the Script Repository: manage it with the `endpointcentral_script` resource, or find one added in the console with the `endpointcentral_script` data source.
 
 ## Example Usage
 
 ```terraform
-# Scripts are added to the Script Repository in the console (the API cannot
-# upload them); look them up by file name.
-data "endpointcentral_script" "computer_name" {
-  name = "set-computer-name.sh"
+# A script managed here (or look one up with the endpointcentral_script data
+# source).
+resource "endpointcentral_script" "computer_name" {
+  name    = "set-computer-name.sh"
+  content = file("${path.module}/scripts/set-computer-name.sh")
 }
 
 data "endpointcentral_custom_group" "all_macs" {
   name = "All Mac machines"
 }
 
-# Runs the script once on every Mac. Any change replaces the configuration
-# (Endpoint Central refuses API tokens on its modify call), so create the new
-# one before the old one is deleted.
+# Runs the script once on every Mac. Changes are made in place and reach the
+# Macs at their next refresh.
 resource "endpointcentral_mac_custom_script" "computer_name" {
   name      = "set-computer-name"
-  script_id = data.endpointcentral_script.computer_name.id
+  script_id = endpointcentral_script.computer_name.id
   arguments = "--prefix corp"
   frequency = "once"
   target = {
     workgroup_id      = "123456789"
     workgroup_name    = "WORKGROUP"
     include_group_ids = [data.endpointcentral_custom_group.all_macs.id]
-  }
-
-  lifecycle {
-    create_before_destroy = true
   }
 }
 ```
@@ -56,7 +52,7 @@ resource "endpointcentral_mac_custom_script" "computer_name" {
 
 - `name` (String) Configuration name.
 - `script_id` (String) ID of the script in the Script Repository, e.g. from `endpointcentral_script`.
-- `target` (Attributes) Computers in a workgroup, narrowed to custom groups, e.g. `WORKGROUP` → include *All Mac machines*. Changing it replaces the configuration. (see [below for nested schema](#nestedatt--target))
+- `target` (Attributes) Computers in a workgroup, narrowed to custom groups, e.g. `WORKGROUP` → include *All Mac machines*. (see [below for nested schema](#nestedatt--target))
 
 ### Optional
 

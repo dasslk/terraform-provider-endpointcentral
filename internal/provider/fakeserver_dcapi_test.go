@@ -97,6 +97,7 @@ type fakeConfig struct {
 
 func (f *fakeEC) registerConfigurations(h func(string, string, string, http.HandlerFunc)) {
 	f.configs = map[int64]*fakeConfig{}
+	f.ecFiles = map[string]string{}
 	f.nextConfigID = 52501000000421000
 	f.scripts = []map[string]any{
 		{"scriptId": "52501000000401316", "scriptName": "set-computer-name.sh", "platformID": 2, "exitCodes": "0",
@@ -108,10 +109,19 @@ func (f *fakeEC) registerConfigurations(h func(string, string, string, http.Hand
 	h("GET /dcapi/configuration/scripts", "", "", f.listScripts)
 	h("POST /dcapi/configuration/mac/customScript/deploy", "application/configDeployStatus.v1+json", "application/deployMacCustomScript.v1+json", f.createScriptConfig)
 	h("GET /dcapi/configuration/{id}", "application/collectionDetails.v1+json", "", f.getConfig)
-	// Modify refuses OAuth tokens on a live tenant, whatever the scopes.
-	h("POST /dcapi/configuration/{id}/deploy", "", "", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"errorMsg": "INVALID_OAUTHSCOPE"})
+	// "/dcapi/configuration/{id}/deploy" and "/dcapi/configuration/scriptRepository/{id}"
+	// overlap as patterns, so one handler serves both.
+	h("POST /dcapi/configuration/{a}/{b}", "", "", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("a") == "scriptRepository" {
+			f.modifyScript(w, r)
+			return
+		}
+		f.modifyConfig(w, r)
 	})
+	h("POST /emsapi/files", "", "", f.uploadECFile)
+	h("POST /dcapi/configuration/scriptRepository/script", "application/addScriptStatus.v1+json", "application/scriptDetails.v1+json", f.createScript)
+	h("GET /dcapi/configuration/scriptRepository/{id}", "", "", f.getScript)
+	h("DELETE /dcapi/configuration/scriptRepository/{id}", "", "", f.deleteScript)
 	h("POST /dcapi/configuration/moveToTrash", "application/moveConfigToTrashStatus.v1+json", "application/moveConfigToTrash.v1+json", f.trashConfigs)
 	h("DELETE /dcapi/configuration/trash/delete", "application/deletedConfigStatus.v1+json", "application/deleteConfigTrash.v1+json", f.deleteTrashedConfigs)
 }
@@ -242,4 +252,171 @@ func (f *fakeEC) liveConfigs() []*fakeConfig {
 		}
 	}
 	return out
+}
+
+func (f *fakeEC) modifyConfig(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("b") != "deploy" || r.Header.Get("Content-Type") != "application/deployConfig.v1+json" ||
+		r.Header.Get("Accept") != "application/configDeployStatus.v1+json" {
+		writeJSON(w, http.StatusUnsupportedMediaType, map[string]any{"errorCode": "415", "errorMsg": "Unsupported Media Type"})
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("a"), 10, 64)
+	c, ok := f.configs[id]
+	if !ok || c.Deleted {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"errorCode": "1001", "errorMsg": "Access denied - You are not allowed to access the requested resource."})
+		return
+	}
+	var b map[string]any
+	if err := json.Unmarshal(readAll(r), &b); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": "IAM0017", "errorMsg": "Request JSON could not be parsed."})
+		return
+	}
+	d := b["configDetails"].([]any)[0].(map[string]any)["details"].([]any)[0].(map[string]any)
+	if b["collectionId"] != r.PathValue("a") || d["detailId"] != strconv.FormatInt(c.ID+1, 10) || !allTargetsLabelled(b["targetData"]) {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"errorCode": "GENERIC0002", "errorMsg": "Invalid configuration details"})
+		return
+	}
+	delete(b, "collectionId")
+	delete(b, "schedulerSettings")
+	delete(d, "detailId")
+	delete(d, "useCredential")
+	b["configType"] = "computer"
+	c.Body = b
+	f.configModifies++
+	writeJSON(w, http.StatusOK, map[string]any{"collectionName": b["label"], "collectionId": r.PathValue("a"), "configType": "Computer"})
+}
+
+// --- Script Repository -------------------------------------------------------
+
+func (f *fakeEC) uploadECFile(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Module") == "" {
+		writeJSON(w, http.StatusNotFound, map[string]any{"errorCode": "IAM0029", "errorMsg": "Module name header is missing in the requested File Access API."})
+		return
+	}
+	file, hdr, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": "IAM0017", "errorMsg": "file missing"})
+		return
+	}
+	defer func() { _ = file.Close() }()
+	data := readAllFrom(file)
+	f.nextConfigID++
+	id := strconv.FormatInt(f.nextConfigID, 10)
+	f.ecFiles[id] = hdr.Filename + "\x00" + string(data)
+	writeJSON(w, http.StatusOK, []map[string]any{{"fileID": id, "fileName": hdr.Filename, "fileStatus": 2}})
+}
+
+type scriptBody struct {
+	Arguments   string `json:"arguments"`
+	Description string `json:"description"`
+	ExitCodes   string `json:"exitCodes"`
+	Shared      bool   `json:"shareScript"`
+	Platform    string `json:"platform"`
+	ScriptFile  struct {
+		FileID string `json:"fileID"`
+	} `json:"scriptFile"`
+}
+
+// applyScript stores body on the script s; false when the file is unknown.
+func (f *fakeEC) applyScript(s map[string]any, b scriptBody) bool {
+	file, ok := f.ecFiles[b.ScriptFile.FileID]
+	if !ok {
+		return false
+	}
+	name, content, _ := strings.Cut(file, "\x00")
+	ids := map[string]int{"windows": 1, "mac": 2, "linux": 3}
+	s["scriptName"], s["content"], s["fileID"] = name, content, b.ScriptFile.FileID
+	s["scriptArguments"], s["description"], s["exitCodes"] = b.Arguments, b.Description, b.ExitCodes
+	s["shareScript"], s["platformID"] = b.Shared, ids[b.Platform]
+	return true
+}
+
+func (f *fakeEC) createScript(w http.ResponseWriter, r *http.Request) {
+	var b scriptBody
+	if json.Unmarshal(readAll(r), &b) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": "IAM0017", "errorMsg": "Request JSON could not be parsed."})
+		return
+	}
+	f.nextConfigID++
+	s := map[string]any{"scriptId": strconv.FormatInt(f.nextConfigID, 10), "isDynamicArgsPresent": false}
+	if !f.applyScript(s, b) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": "IAM0025", "errorMsg": "fileID is an invalid parameter format."})
+		return
+	}
+	f.scripts = append(f.scripts, s)
+	writeJSON(w, http.StatusOK, map[string]any{"status": "success", "scriptId": s["scriptId"], "fileName": s["scriptName"]})
+}
+
+func (f *fakeEC) scriptByID(id string) map[string]any {
+	for _, s := range f.scripts {
+		if s["scriptId"] == id {
+			return s
+		}
+	}
+	return nil
+}
+
+func (f *fakeEC) getScript(w http.ResponseWriter, r *http.Request) {
+	s := f.scriptByID(r.PathValue("id"))
+	if s == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"errorCode": "50001", "errorMsg": "An Internal Error occurred, try again later."})
+		return
+	}
+	platform := map[int]string{1: "windows", 2: "mac", 3: "linux"}[s["platformID"].(int)]
+	desc, _ := s["description"].(string)
+	if desc == "" {
+		desc = "--"
+	}
+	shared, _ := s["shareScript"].(bool)
+	writeJSON(w, http.StatusOK, map[string]any{"description": desc, "exitCodes": s["exitCodes"], "platform": platform,
+		"arguments": s["scriptArguments"], "isTemplateScript": false, "shareScript": shared,
+		"scriptFile": map[string]any{"fileID": s["fileID"], "fileName": s["scriptName"]}})
+}
+
+func (f *fakeEC) modifyScript(w http.ResponseWriter, r *http.Request) {
+	s := f.scriptByID(r.PathValue("b"))
+	if s == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"errorCode": "50001", "errorMsg": "An Internal Error occurred, try again later."})
+		return
+	}
+	var b scriptBody
+	if json.Unmarshal(readAll(r), &b) != nil || !f.applyScript(s, b) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"errorCode": "IAM0025", "errorMsg": "fileID is an invalid parameter format."})
+		return
+	}
+	f.scriptModifies++
+	writeJSON(w, http.StatusOK, map[string]any{"status": "success"})
+}
+
+func (f *fakeEC) deleteScript(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	s := f.scriptByID(id)
+	if s == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"errorCode": "50001", "errorMsg": "An Internal Error occurred, try again later."})
+		return
+	}
+	used := false
+	for _, c := range f.configs {
+		if !c.Deleted && !c.Trashed {
+			d := c.Body["configDetails"].([]any)[0].(map[string]any)["details"].([]any)[0].(map[string]any)
+			used = used || d["scriptId"] == id
+		}
+	}
+	if !used {
+		f.scripts = slices.DeleteFunc(f.scripts, func(x map[string]any) bool { return x["scriptId"] == id })
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"isUsedInDeploymentPolicy": false, "allowAccess": true, "isUsedInEA": false,
+		"scriptDeleted": !used, "isUsedInConfig": used, "isUsedInDynamicCustomGroup": false, "scriptName": s["scriptName"], "scriptId": id})
+}
+
+func readAllFrom(rd interface{ Read([]byte) (int, error) }) []byte {
+	b := make([]byte, 0, 4096)
+	buf := make([]byte, 4096)
+	for {
+		n, err := rd.Read(buf)
+		b = append(b, buf[:n]...)
+		if err != nil {
+			return b
+		}
+	}
 }

@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,10 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrTokenRateLimited is returned when Zoho refuses a new access token because
+// too many were requested in a short time. The credentials are fine.
+var ErrTokenRateLimited = errors.New("zoho is rate-limiting access tokens")
 
 // TokenSource returns a valid OAuth access token.
 type TokenSource interface {
@@ -111,7 +116,7 @@ func (r *RefreshTokenSource) Token(ctx context.Context) (string, error) {
 		if strings.Contains(strings.ToLower(tr.ErrorDescription), "too many requests") {
 			// Zoho limits how many access tokens a refresh token gets in a
 			// short time; every provider run asks for one.
-			return "", fmt.Errorf("zoho is rate-limiting access tokens: %q. Wait a few minutes and run again", tr.ErrorDescription)
+			return "", fmt.Errorf("%w: %q. Wait a few minutes and run again", ErrTokenRateLimited, tr.ErrorDescription)
 		}
 		msg := fmt.Sprintf("zoho token endpoint returned error %q", tr.Error)
 		if tr.ErrorDescription != "" {
